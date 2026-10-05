@@ -1,0 +1,4 @@
+||ads.test.com^
+||track.example.com^
+! 这是测试规则
+/banner/
