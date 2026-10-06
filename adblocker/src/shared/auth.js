@@ -1243,42 +1243,6 @@
     ));
   }
 
-  // 渲染最近登录记录
-  async function renderLoginLog() {
-    const listEl = document.getElementById("loginLogList");
-    if (!listEl) return;
-    try {
-      const store = await chrome.storage.local.get(LOGIN_LOG_KEY);
-      const log = (store[LOGIN_LOG_KEY] || []).slice(-10).reverse();  // 最近 10 条，倒序
-      listEl.innerHTML = "";
-      if (!log.length) {
-        listEl.innerHTML = '<li class="login-log-empty">暂无登录记录</li>';
-        return;
-      }
-      for (const entry of log) {
-        const li = document.createElement("li");
-        li.className = "login-log-item";
-        const ok = !!entry.ok;
-        const iconSvg = ok
-          ? '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'
-          : '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
-        const title = ok ? "登录成功" : "登录失败";
-        const timeText = relativeTime(entry.ts || 0);
-        const fullTime = entry.ts ? new Date(entry.ts).toLocaleString("zh-CN") : "";
-        const reasonText = !ok && entry.reason ? " · " + translateError(entry.reason) : "";
-        li.innerHTML =
-          '<div class="login-log-icon ' + (ok ? "ok" : "fail") + '">' + iconSvg + '</div>' +
-          '<div class="login-log-body">' +
-            '<div class="login-log-title">' + title + reasonText + '</div>' +
-            '<div class="login-log-time" title="' + escapeHtmlSimple(fullTime) + '">' + timeText + '</div>' +
-          '</div>';
-        listEl.appendChild(li);
-      }
-    } catch (e) {
-      listEl.innerHTML = '<li class="login-log-empty">加载失败</li>';
-    }
-  }
-
   // 渲染设备列表
   async function renderDevices() {
     const listEl = document.getElementById("deviceList");

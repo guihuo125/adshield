@@ -1429,53 +1429,6 @@ html[data-theme="dark"] .skeleton {
   }
 
 
-/* 登录记录 */
-.login-log-list {
-  list-style: none;
-  padding: 0;
-  margin: 0;
-  display: flex;
-  flex-direction: column;
-}
-.login-log-item {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 4px;
-  border-bottom: 1px solid var(--border-primary);
-  font-size: 13px;
-}
-.login-log-item:last-child { border-bottom: none; }
-.login-log-icon {
-  width: 28px; height: 28px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-}
-.login-log-icon.ok { background: #ecfdf5; color: #10b981; }
-.login-log-icon.fail { background: #fee2e2; color: #e11d20; }
-.login-log-body { flex: 1; min-width: 0; }
-.login-log-title {
-  color: var(--text-primary);
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-.login-log-time {
-  font-size: 11.5px;
-  color: var(--text-tertiary);
-  margin-top: 2px;
-}
-.login-log-empty {
-  padding: 16px 0;
-  text-align: center;
-  color: var(--text-tertiary);
-  font-size: 12.5px;
-}
-
 /* 头像修改弹窗 */
 .avatar-picker {
   padding: 4px 0 0;
