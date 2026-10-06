@@ -5,173 +5,260 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>邮箱验证成功 · AdShield</title>
   <meta name="referrer" content="no-referrer" />
-  <meta name="description" content="AdShield 邮箱验证成功" />
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body {
-      height: 100%;
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
-    }
+    html { font-size: 16px; }
     body {
       min-height: 100vh;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      background: #fafbfc;
+      color: #1a1d21;
+      -webkit-font-smoothing: antialiased;
       display: flex;
       flex-direction: column;
-      background: #f7f9fb;
-      color: #202225;
-      -webkit-font-smoothing: antialiased;
-      line-height: 1.5;
+      position: relative;
+      overflow-x: hidden;
     }
 
-    /* 顶部品牌栏 */
-    .navbar {
-      background: #fff;
-      border-bottom: 1px solid #e8eaed;
-      padding: 14px 0;
+    /* 背景装饰 - 淡蓝色光晕 */
+    body::before {
+      content: '';
+      position: fixed;
+      top: -300px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 800px;
+      height: 600px;
+      background: radial-gradient(ellipse, rgba(0,174,240,.08) 0%, rgba(0,174,240,0) 70%);
+      pointer-events: none;
+      z-index: 0;
     }
-    .navbar-inner {
-      max-width: 960px;
+
+    /* ============ 顶部导航 ============ */
+    .nav {
+      position: relative;
+      z-index: 1;
+      padding: 20px 0;
+      background: rgba(255,255,255,.7);
+      backdrop-filter: blur(12px);
+      border-bottom: 1px solid rgba(0,0,0,.05);
+    }
+    .nav-inner {
+      max-width: 1040px;
       margin: 0 auto;
-      padding: 0 24px;
+      padding: 0 28px;
       display: flex;
       align-items: center;
       gap: 10px;
     }
-    .navbar-logo {
+    .nav-logo {
       width: 32px; height: 32px;
+      border-radius: 8px;
       background: linear-gradient(135deg, #00aef0, #0077cc);
-      border-radius: 9px;
       display: flex;
       align-items: center;
       justify-content: center;
-      box-shadow: 0 2px 8px rgba(0,174,240,.3);
+      box-shadow: 0 2px 8px rgba(0,174,240,.25), inset 0 1px 0 rgba(255,255,255,.3);
     }
-    .navbar-name {
-      font-size: 16px;
+    .nav-name {
+      font-size: 15px;
       font-weight: 700;
-      color: #202225;
+      color: #1a1d21;
       letter-spacing: -0.2px;
     }
-    .navbar-badge {
+    .nav-status {
       margin-left: auto;
-      font-size: 12px;
-      color: #636568;
-      display: flex;
+      display: inline-flex;
       align-items: center;
-      gap: 6px;
-      padding: 5px 10px;
-      background: #f7f9fb;
-      border: 1px solid #e8eaed;
+      gap: 8px;
+      padding: 6px 12px;
+      background: rgba(16,185,129,.08);
+      border: 1px solid rgba(16,185,129,.2);
       border-radius: 999px;
+      font-size: 12px;
+      font-weight: 600;
+      color: #059669;
     }
-    .navbar-badge .dot {
-      width: 6px; height: 6px;
+    .nav-status .dot {
+      width: 7px; height: 7px;
       background: #10b981;
       border-radius: 50%;
-      box-shadow: 0 0 0 3px rgba(16,185,129,.15);
+      position: relative;
+    }
+    .nav-status .dot::after {
+      content: '';
+      position: absolute;
+      inset: -3px;
+      border-radius: 50%;
+      background: rgba(16,185,129,.3);
+      animation: ring 2s infinite;
+    }
+    @keyframes ring {
+      0% { transform: scale(0.8); opacity: 1; }
+      100% { transform: scale(1.8); opacity: 0; }
     }
 
-    /* 主内容 */
+    /* ============ 主内容 ============ */
     .main {
+      position: relative;
+      z-index: 1;
       flex: 1;
       display: flex;
       align-items: center;
       justify-content: center;
-      padding: 48px 24px;
+      padding: 60px 28px;
     }
     .card {
-      background: #fff;
-      border-radius: 16px;
-      border: 1px solid #e8eaed;
-      box-shadow: 0 1px 3px rgba(0,0,0,.04), 0 8px 32px rgba(0,0,0,.06);
-      padding: 56px 44px 44px;
-      max-width: 520px;
       width: 100%;
+      max-width: 560px;
+      background: #ffffff;
+      border-radius: 20px;
+      border: 1px solid rgba(0,0,0,.06);
+      box-shadow:
+        0 0 0 1px rgba(0,0,0,.02),
+        0 1px 2px rgba(0,0,0,.03),
+        0 12px 40px rgba(0,0,0,.06);
+      padding: 48px 44px 40px;
       text-align: center;
+      animation: cardIn .5s cubic-bezier(0.22, 1, 0.36, 1);
+    }
+    @keyframes cardIn {
+      from { transform: translateY(12px); opacity: 0; }
+      to { transform: translateY(0); opacity: 1; }
     }
 
     /* 成功图标 */
     .success-icon {
-      width: 80px; height: 80px;
-      margin: 0 auto 24px;
-      background: linear-gradient(135deg, #10b981, #059669);
-      border-radius: 50%;
+      width: 96px; height: 96px;
+      margin: 0 auto 28px;
+      position: relative;
       display: flex;
       align-items: center;
       justify-content: center;
-      position: relative;
-      box-shadow: 0 8px 24px rgba(16,185,129,.35);
-      animation: popIn .4s cubic-bezier(0.34, 1.56, 0.64, 1);
     }
-    .success-icon::before {
+    .success-icon-bg {
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(135deg, #34d399 0%, #10b981 50%, #059669 100%);
+      border-radius: 50%;
+      box-shadow:
+        0 12px 32px rgba(16,185,129,.32),
+        0 4px 8px rgba(16,185,129,.2),
+        inset 0 -2px 4px rgba(0,0,0,.1),
+        inset 0 2px 4px rgba(255,255,255,.25);
+      animation: popIn .6s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .success-icon-bg::before {
       content: '';
       position: absolute;
-      inset: -8px;
+      inset: -6px;
       border-radius: 50%;
-      border: 2px solid rgba(16,185,129,.2);
-      animation: pulse 2s infinite;
+      border: 2px solid rgba(16,185,129,.15);
+      animation: pulse 2.4s ease-out infinite;
+    }
+    .success-icon svg {
+      position: relative;
+      z-index: 1;
+      animation: checkIn .4s .3s both;
     }
     @keyframes popIn {
-      from { transform: scale(0.5); opacity: 0; }
+      from { transform: scale(0.4); opacity: 0; }
       to { transform: scale(1); opacity: 1; }
     }
     @keyframes pulse {
-      0%, 100% { opacity: 1; transform: scale(1); }
-      50% { opacity: 0.4; transform: scale(1.08); }
+      0% { transform: scale(1); opacity: 0.8; }
+      100% { transform: scale(1.4); opacity: 0; }
+    }
+    @keyframes checkIn {
+      from { stroke-dashoffset: 40; }
+      to { stroke-dashoffset: 0; }
+    }
+    .success-icon polyline {
+      stroke-dasharray: 40;
+    }
+
+    /* 标题 */
+    .title-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 5px 12px;
+      background: rgba(16,185,129,.08);
+      color: #059669;
+      border-radius: 999px;
+      font-size: 11.5px;
+      font-weight: 700;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+      margin-bottom: 16px;
     }
 
     h1 {
-      font-size: 26px;
+      font-size: 30px;
       font-weight: 700;
-      color: #202225;
-      margin-bottom: 10px;
-      letter-spacing: -0.3px;
+      color: #0d1117;
+      letter-spacing: -0.6px;
+      line-height: 1.2;
+      margin-bottom: 12px;
     }
     .subtitle {
-      font-size: 15px;
-      color: #636568;
+      font-size: 15.5px;
+      color: #5c6370;
       line-height: 1.65;
-      margin-bottom: 32px;
+      margin-bottom: 36px;
     }
 
-    /* 步骤区 */
-    .steps-box {
-      background: #f7f9fb;
-      border: 1px solid #e8eaed;
-      border-radius: 12px;
-      padding: 20px 24px;
+    /* 步骤列表 - 更精致 */
+    .steps {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+      margin-bottom: 32px;
       text-align: left;
-      margin-bottom: 28px;
-    }
-    .steps-box-title {
-      font-size: 12px;
-      font-weight: 700;
-      color: #636568;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-      margin-bottom: 14px;
     }
     .step {
       display: flex;
-      align-items: flex-start;
-      gap: 12px;
-      font-size: 13.5px;
-      color: #3f4146;
-      line-height: 1.55;
-      padding: 6px 0;
+      align-items: center;
+      gap: 14px;
+      padding: 14px 16px;
+      border-radius: 12px;
+      transition: background .15s;
     }
-    .step-num {
-      width: 22px; height: 22px;
+    .step:hover {
+      background: #fafbfc;
+    }
+    .step-icon {
+      width: 36px; height: 36px;
       flex-shrink: 0;
-      background: #fff;
-      border: 1.5px solid #d0d3d6;
-      color: #636568;
-      border-radius: 50%;
+      border-radius: 10px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font-size: 11.5px;
-      font-weight: 700;
-      margin-top: 1px;
+      background: linear-gradient(135deg, #eff6ff, #dbeafe);
+      color: #0077cc;
+    }
+    .step:nth-child(2) .step-icon {
+      background: linear-gradient(135deg, #f5f3ff, #ede9fe);
+      color: #7c3aed;
+    }
+    .step:nth-child(3) .step-icon {
+      background: linear-gradient(135deg, #ecfdf5, #d1fae5);
+      color: #059669;
+    }
+    .step-body {
+      flex: 1;
+      min-width: 0;
+    }
+    .step-title {
+      font-size: 14px;
+      font-weight: 600;
+      color: #1a1d21;
+      margin-bottom: 1px;
+    }
+    .step-desc {
+      font-size: 12.5px;
+      color: #8b919c;
+      line-height: 1.4;
     }
 
     /* 按钮 */
@@ -180,95 +267,101 @@
       align-items: center;
       justify-content: center;
       gap: 8px;
-      padding: 12px 28px;
-      background: #00aef0;
+      width: 100%;
+      padding: 14px 24px;
+      background: linear-gradient(135deg, #00aef0, #0077cc);
       color: #fff;
       text-decoration: none;
-      border-radius: 10px;
+      border-radius: 12px;
       font-weight: 600;
-      font-size: 14px;
+      font-size: 14.5px;
       border: none;
       cursor: pointer;
-      transition: background .15s, transform .15s, box-shadow .15s;
+      transition: all .18s cubic-bezier(0.22, 1, 0.36, 1);
       font-family: inherit;
-      box-shadow: 0 2px 8px rgba(0,174,240,.3);
+      box-shadow:
+        0 1px 2px rgba(0,119,204,.2),
+        0 4px 12px rgba(0,174,240,.3),
+        inset 0 1px 0 rgba(255,255,255,.15);
     }
     .btn:hover {
-      background: #0077cc;
       transform: translateY(-1px);
-      box-shadow: 0 4px 16px rgba(0,174,240,.4);
+      box-shadow:
+        0 1px 2px rgba(0,119,204,.2),
+        0 8px 20px rgba(0,174,240,.4),
+        inset 0 1px 0 rgba(255,255,255,.15);
+    }
+    .btn:active {
+      transform: translateY(0);
     }
 
-    /* 安全提示 */
-    .security-note {
+    /* 安全说明 */
+    .security {
       display: flex;
       align-items: center;
+      justify-content: center;
       gap: 8px;
       margin-top: 24px;
-      padding-top: 24px;
-      border-top: 1px solid #f0f2f4;
       font-size: 12px;
       color: #9ca3af;
-      justify-content: center;
     }
-    .security-note svg {
-      flex-shrink: 0;
-    }
+    .security svg { flex-shrink: 0; }
 
-    /* 底部 */
+    /* ============ 底部 ============ */
     .footer {
-      padding: 24px;
-      text-align: center;
-      font-size: 12.5px;
-      color: #9ca3af;
-      border-top: 1px solid #e8eaed;
-      background: #fff;
+      position: relative;
+      z-index: 1;
+      padding: 24px 28px;
+      border-top: 1px solid rgba(0,0,0,.05);
+      background: rgba(255,255,255,.6);
+      backdrop-filter: blur(12px);
     }
     .footer-inner {
-      max-width: 960px;
+      max-width: 1040px;
       margin: 0 auto;
       display: flex;
       align-items: center;
       justify-content: center;
-      gap: 20px;
       flex-wrap: wrap;
+      gap: 8px 20px;
+      font-size: 12.5px;
+      color: #8b919c;
     }
     .footer a {
-      color: #636568;
+      color: #5c6370;
       text-decoration: none;
+      font-weight: 500;
       transition: color .15s;
     }
-    .footer a:hover {
-      color: #00aef0;
-    }
-    .footer-sep {
-      color: #d0d3d6;
-    }
+    .footer a:hover { color: #00aef0; }
+    .footer .sep { color: #d0d3d6; }
 
-    @media (max-width: 560px) {
+    /* ============ 响应式 ============ */
+    @media (max-width: 600px) {
       .card { padding: 40px 24px 32px; }
-      h1 { font-size: 22px; }
-      .navbar-badge { display: none; }
-      .footer-inner { gap: 12px; }
+      h1 { font-size: 24px; }
+      .success-icon { width: 80px; height: 80px; }
+      .success-icon svg { width: 34px; height: 34px; }
+      .nav-inner, .footer-inner { padding: 0 20px; }
     }
   </style>
 </head>
 <body>
 
   <!-- 顶部导航 -->
-  <header class="navbar">
-    <div class="navbar-inner">
-      <div class="navbar-logo">
-        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+  <header class="nav">
+    <div class="nav-inner">
+      <div class="nav-logo">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
           <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
           <polyline points="9 12 11 14 15 10"/>
         </svg>
       </div>
-      <span class="navbar-name">AdShield</span>
-      <div class="navbar-badge">
+      <span class="nav-name">AdShield</span>
+      <span class="nav-status">
         <span class="dot"></span>
         安全连接
-      </div>
+      </span>
     </div>
   </header>
 
@@ -276,47 +369,80 @@
   <main class="main">
     <div class="card">
       <div class="success-icon">
-        <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+        <div class="success-icon-bg"></div>
+        <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round">
           <polyline points="20 6 9 17 4 12"/>
         </svg>
+      </div>
+
+      <div class="title-badge">
+        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="20 6 9 17 4 12"/>
+        </svg>
+        已验证
       </div>
 
       <h1>邮箱验证成功</h1>
       <p class="subtitle">
         您的 AdShield 账号已激活<br>
-        现在可以登录并开始使用了
+        现在可以登录并开始使用
       </p>
 
-      <div class="steps-box">
-        <div class="steps-box-title">接下来的步骤</div>
+      <div class="steps">
         <div class="step">
-          <span class="step-num">1</span>
-          <span>关闭当前浏览器标签页</span>
+          <div class="step-icon">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"/>
+              <line x1="6" y1="6" x2="18" y2="18"/>
+            </svg>
+          </div>
+          <div class="step-body">
+            <div class="step-title">关闭此标签页</div>
+            <div class="step-desc">验证已完成，此页面可以关闭</div>
+          </div>
         </div>
+
         <div class="step">
-          <span class="step-num">2</span>
-          <span>回到浏览器，打开 <strong>AdShield 设置</strong></span>
+          <div class="step-icon">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="3"/>
+              <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+            </svg>
+          </div>
+          <div class="step-body">
+            <div class="step-title">打开 AdShield 设置</div>
+            <div class="step-desc">在浏览器工具栏点击 AdShield 图标</div>
+          </div>
         </div>
+
         <div class="step">
-          <span class="step-num">3</span>
-          <span>在「账号」页面使用邮箱和密码登录</span>
+          <div class="step-icon">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/>
+              <polyline points="10 17 15 12 10 7"/>
+              <line x1="15" y1="12" x2="3" y2="12"/>
+            </svg>
+          </div>
+          <div class="step-body">
+            <div class="step-title">登录您的账号</div>
+            <div class="step-desc">使用刚注册的邮箱和密码</div>
+          </div>
         </div>
       </div>
 
       <button class="btn" onclick="tryClose()">
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="18" y1="6" x2="6" y2="18"/>
-          <line x1="6" y1="6" x2="18" y2="18"/>
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
+          <polyline points="20 6 9 17 4 12"/>
         </svg>
         我已了解，关闭此页面
       </button>
 
-      <div class="security-note">
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <div class="security">
+        <svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <rect x="3" y="11" width="18" height="11" rx="2"/>
           <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
         </svg>
-        此页面由 GitHub Pages 安全托管，未收集任何信息
+        由 GitHub Pages 安全托管 · 未收集任何信息
       </div>
     </div>
   </main>
@@ -325,17 +451,17 @@
   <footer class="footer">
     <div class="footer-inner">
       <span>© 2026 AdShield</span>
-      <span class="footer-sep">·</span>
+      <span class="sep">·</span>
       <a href="https://github.com/guihuo125/adshield" target="_blank" rel="noopener">GitHub</a>
-      <span class="footer-sep">·</span>
+      <span class="sep">·</span>
       <a href="https://github.com/guihuo125/adshield/blob/main/PRIVACY.md" target="_blank" rel="noopener">隐私政策</a>
-      <span class="footer-sep">·</span>
+      <span class="sep">·</span>
       <a href="https://microsoftedge.microsoft.com/addons/detail/ogjodahjklhodkmnjhopkopflngicokg" target="_blank" rel="noopener">Edge 商店</a>
     </div>
   </footer>
 
   <script>
-    // 安全：立即清除 URL 里的 access_token
+    // 立即清除 URL 里的 token（安全）
     if (location.hash) {
       history.replaceState(null, "", location.pathname + location.search);
     }
@@ -343,9 +469,10 @@
     function tryClose() {
       window.close();
       setTimeout(() => {
-        // 如果无法关闭（非脚本打开），显示提示
-        document.querySelector('.btn').outerHTML =
-          '<div style="padding:12px 20px;background:#e7f6fe;color:#0077cc;border-radius:10px;font-size:13.5px;font-weight:600;">请手动关闭此标签页，然后回到 AdShield 登录 ✓</div>';
+        const btn = document.querySelector('.btn');
+        if (btn) {
+          btn.outerHTML = '<div style="padding:14px;background:#e7f6fe;color:#0077cc;border-radius:12px;font-size:13.5px;font-weight:600;">✓ 验证已完成，请手动关闭此标签页</div>';
+        }
       }, 200);
     }
   </script>
