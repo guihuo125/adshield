@@ -33,8 +33,11 @@
   gap: 12px;
 }
 .adshield-modal-message {
-  overflow-y: auto;
+  flex: 0 1 auto;
+  min-height: 0;
   max-height: 60vh;
+  overflow-y: auto;
+  padding-right: 2px;
 }
 .adshield-modal-overlay.open .adshield-modal {
   transform: scale(1);
@@ -66,6 +69,9 @@
   display: flex;
   flex-direction: column;
   gap: 0;
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow: hidden;
 }
 .adshield-modal-title {
   font-size: 16px;
@@ -160,6 +166,7 @@ html[data-theme="dark"] .adshield-modal-message::-webkit-scrollbar-thumb {
   justify-content: flex-end;
   gap: 8px;
   margin-top: 4px;
+  flex-shrink: 0;
 }
 .adshield-modal-btn {
   padding: 9px 18px;

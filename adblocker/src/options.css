@@ -1344,6 +1344,74 @@ html[data-theme="dark"] .skeleton {
 html[data-theme="dark"] .sync-toast { background: #f2f4f7; color: #202225; }
 
 
+/* ============ 删除账号验证弹窗 ============ */
+.del-verify-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 0;
+}
+.del-verify-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+.del-verify-hint {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+}
+.del-verify-hint strong {
+  color: var(--text-primary);
+  word-break: break-all;
+  font-weight: 600;
+}
+.del-verify-input {
+  width: 100%;
+  padding: 9px 12px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-m);
+  font-family: 'Consolas', 'Monaco', monospace;
+  font-size: 15px;
+  font-weight: 600;
+  letter-spacing: 2px;
+  text-align: center;
+  color: var(--text-primary);
+  outline: none;
+  transition: border-color .12s, box-shadow .12s, background .12s;
+}
+.del-verify-input::placeholder {
+  font-size: 13px;
+  font-weight: 500;
+  letter-spacing: 0;
+  color: var(--text-tertiary);
+  font-family: inherit;
+}
+.del-verify-input:focus {
+  border-color: var(--brand-500);
+  background: var(--bg-primary);
+  box-shadow: 0 0 0 3px rgba(0,174,240,.15);
+}
+.del-verify-form .auth-hint {
+  font-size: 12px;
+  margin-top: -4px;
+}
+.del-verify-resend {
+  color: var(--color-brand-600);
+  font-weight: 600;
+  font-size: 12.5px;
+  text-decoration: none;
+  transition: opacity .12s;
+}
+.del-verify-resend:hover {
+  text-decoration: underline;
+}
+
 /* ============ Auth 弹窗 ============ */
 .auth-form {
   display: flex;
@@ -1410,11 +1478,16 @@ html[data-theme="dark"] .auth-notice-ok {
 
 .auth-hint {
   font-size: 12px;
-  min-height: 16px;
-  color: var(--text-tertiary);
+  color: var(--color-danger-500);
+  min-height: 0;
+  display: none;
 }
-.auth-hint.err { color: var(--color-danger-500); }
-.auth-hint.ok { color: var(--color-success-600); }
+.auth-hint:not(:empty) {
+  display: block;
+  margin-top: 2px;
+}
+.auth-hint.err { color: var(--color-danger-500); display: block; margin-top: 2px; }
+.auth-hint.ok { color: var(--color-success-600); display: block; margin-top: 2px; }
 .auth-switch {
   font-size: 12.5px;
   color: var(--text-secondary);

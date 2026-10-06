@@ -1,4 +1,4 @@
-// AdShield 账号系统（Supabase 预留）
+﻿// AdShield 账号系统（Supabase 预留）
 (function () {
   if (window.__adshield_auth__) return;
   window.__adshield_auth__ = true;
@@ -32,7 +32,10 @@
     if (m.includes("Password should be at least")) return "密码至少 6 位";
     if (m.includes("signup is disabled")) return "注册功能已关闭";
     if (m.includes("email rate limit exceeded")) return "验证邮件发送过于频繁，请稍后再试";
-    if (m.includes("For security purposes")) return "操作过于频繁，请稍后再试";
+    if (m.includes("For security purposes")) {
+      const match = m.match(/after (\d+) seconds?/i);
+      return match ? ("请求过于频繁，请 " + match[1] + " 秒后重试") : "请求过于频繁，请稍后再试";
+    }
     if (m.includes("JWT expired")) return "登录已过期，请重新登录";
     return m;
   }
@@ -627,9 +630,31 @@
     return true;
   }
 
+  // ===== 删除账号：发送验证邮件 =====
+  async function sendDeleteVerificationEmail(email) {
+    if (!isSupabaseReady()) throw new Error("本地演示模式暂不支持");
+    await sbRequest("/auth/v1/recover", {
+      method: "POST",
+      body: JSON.stringify({ email })
+    });
+    return true;
+  }
+
+  // ===== 删除账号：验证 6 位验证码，返回 access_token =====
+  async function verifyDeleteCode(email, token) {
+    if (!isSupabaseReady()) throw new Error("本地演示模式暂不支持");
+    const data = await sbRequest("/auth/v1/verify", {
+      method: "POST",
+      body: JSON.stringify({ type: "recovery", email, token })
+    });
+    if (!data || !data.access_token) throw new Error("验证码无效");
+    return data.access_token;
+  }
+
   // ===== 删除账号 =====
   // 返回 { ok, configDeleted, authDeleted, mode, errors: [] }
-  async function deleteAccount() {
+  // verifyToken 可选：删除验证码验证成功后返回的新 access_token
+  async function deleteAccount(verifyToken) {
     const state = await getAuthState();
     if (!state) throw new Error("未登录");
 
@@ -640,9 +665,9 @@
 
     const result = { ok: false, configDeleted: false, authDeleted: false, mode: "supabase", errors: [] };
 
-    // 0) 尝试用 refresh_token 换新 access_token（避免 token 过期）
-    let token = state.token;
-    if (state.refreshToken) {
+    // 0) 优先用验证码验证返回的新 token
+    let token = verifyToken || state.token;
+    if (!verifyToken && state.refreshToken) {
       try {
         const r = await fetch(SUPABASE_URL + "/auth/v1/token?grant_type=refresh_token", {
           method: "POST",
@@ -705,6 +730,111 @@
     await setAuthState(null);
     result.ok = result.authDeleted;
     return result;
+  }
+
+  // ===== 删除账号：输入验证码弹窗 =====
+  function showDeleteVerificationDialog(email) {
+    const html = `
+      <form class="del-verify-form" id="delForm" autocomplete="off">
+        <input type="text" class="del-verify-input" id="delCode"
+          placeholder="输入验证码" maxlength="10" required
+          autocomplete="one-time-code" inputmode="numeric" />
+        <div class="auth-hint" id="delHint"></div>
+        <div class="del-verify-top">
+          <div class="del-verify-hint">验证码已发送，请检查邮件。</div>
+          <a href="#" id="delResend" class="del-verify-resend">重新发送</a>
+        </div>
+      </form>
+    `;
+
+    return new Promise((resolve) => {
+      const overlay = document.createElement("div");
+      overlay.className = "adshield-modal-overlay";
+      overlay.setAttribute("data-type", "danger");
+      overlay.setAttribute("data-size", "normal");
+
+      overlay.innerHTML = `
+        <div class="adshield-modal" role="dialog" aria-modal="true">
+          <div class="adshield-modal-icon" data-icon></div>
+          <div class="adshield-modal-body">
+            <div class="adshield-modal-title">删除账号 — 安全验证</div>
+            <div class="adshield-modal-message"></div>
+          </div>
+          <div class="adshield-modal-actions">
+            <button class="adshield-modal-btn adshield-modal-btn-cancel" data-cancel>取消</button>
+            <button class="adshield-modal-btn adshield-modal-btn-confirm" data-confirm>验证并删除</button>
+          </div>
+        </div>
+      `;
+
+      const iconEl = overlay.querySelector("[data-icon]");
+      iconEl.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>';
+
+      overlay.querySelector(".adshield-modal-message").innerHTML = html;
+      document.body.appendChild(overlay);
+      requestAnimationFrame(() => overlay.classList.add("open"));
+
+      const form = overlay.querySelector("#delForm");
+      const codeInput = overlay.querySelector("#delCode");
+      const hint = overlay.querySelector("#delHint");
+      const btnConfirm = overlay.querySelector("[data-confirm]");
+      const btnCancel = overlay.querySelector("[data-cancel]");
+      const btnResend = overlay.querySelector("#delResend");
+
+      function cleanup() {
+        overlay.classList.remove("open");
+        setTimeout(() => overlay.remove(), 180);
+      }
+
+      function submit() {
+        const code = (codeInput.value || "").trim();
+        hint.textContent = "";
+        hint.className = "auth-hint";
+        if (!/^[0-9]{6,10}$/.test(code)) {
+          hint.textContent = "请输入邮件中的验证码（6~10 位数字）";
+          hint.classList.add("err");
+          return;
+        }
+        cleanup();
+        resolve(code);
+      }
+
+      form.addEventListener("submit", (e) => { e.preventDefault(); submit(); });
+      btnConfirm.addEventListener("click", submit);
+      btnCancel.addEventListener("click", () => { cleanup(); resolve(null); });
+      overlay.addEventListener("click", (e) => {
+        if (e.target === overlay) { cleanup(); resolve(null); }
+      });
+
+      btnResend.addEventListener("click", async (e) => {
+        e.preventDefault();
+        btnResend.textContent = "发送中...";
+        btnResend.style.pointerEvents = "none";
+        try {
+          await sendDeleteVerificationEmail(email);
+          btnResend.textContent = "已重新发送";
+          setTimeout(() => {
+            btnResend.textContent = "重新发送验证码";
+            btnResend.style.pointerEvents = "";
+          }, 3000);
+        } catch (e2) {
+          const m = String(e2.message || e2);
+          const match = m.match(/after (\d+) seconds?/i);
+          btnResend.textContent = match ? ("请 " + match[1] + " 秒后重试") : "发送过于频繁";
+          setTimeout(() => {
+            btnResend.textContent = "重新发送验证码";
+            btnResend.style.pointerEvents = "";
+          }, 5000);
+        }
+      });
+
+      const onKey = (e) => {
+        if (e.key === "Escape") { cleanup(); document.removeEventListener("keydown", onKey); resolve(null); }
+      };
+      document.addEventListener("keydown", onKey);
+
+      setTimeout(() => codeInput.focus(), 50);
+    });
   }
 
   // ===== 处理密码重置回跳 =====
@@ -1771,18 +1901,53 @@
     });
 
     if (btnDeleteAccount) btnDeleteAccount.addEventListener("click", async () => {
+      const state = await getAuthState();
+      if (!state || !state.email) {
+        await showAlert("请先登录账号", { title: "提示", type: "info" });
+        return;
+      }
+
+      // 第 1 步：确认
       const ok = await showConfirm(
-        "此操作将永久删除您的账号与云端数据，不可恢复。\n\n确定继续？",
-        { title: "删除账号", confirmText: "永久删除", cancelText: "取消", type: "danger" }
+        "此操作将永久删除您的账号与云端数据，不可恢复。\n\n下一步会向您的邮箱发送验证码。",
+        { title: "删除账号", confirmText: "继续", cancelText: "取消", type: "danger" }
       );
       if (!ok) return;
-      const ok2 = await showConfirm(
-        "再次确认：真的要删除账号吗？",
-        { title: "最后确认", confirmText: "删除", cancelText: "取消", type: "danger" }
-      );
-      if (!ok2) return;
+
+      // 第 2 步：发送验证码
       try {
-        const result = await deleteAccount();
+        await sendDeleteVerificationEmail(state.email);
+      } catch (e) {
+        const msg = translateError(e.message || e);
+        // 限流时：提示用户直接用之前发送的验证码
+        if (/请求过于频繁|For security purposes/i.test(e.message || e)) {
+          const ok = await showConfirm(
+            msg + "\n\n如果之前已收到验证码邮件，可直接输入验证。",
+            { title: "请求过于频繁", confirmText: "输入验证码", cancelText: "取消", type: "warning" }
+          );
+          if (!ok) return;
+        } else {
+          await showAlert("发送验证码失败：" + msg, { title: "错误", type: "danger" });
+          return;
+        }
+      }
+
+      // 第 3 步：输入验证码
+      const code = await showDeleteVerificationDialog(state.email);
+      if (!code) return;
+
+      // 第 4 步：验证码校验
+      let verifyToken;
+      try {
+        verifyToken = await verifyDeleteCode(state.email, code);
+      } catch (e) {
+        await showAlert("验证码校验失败：" + (e.message || e), { title: "验证失败", type: "danger" });
+        return;
+      }
+
+      // 第 5 步：执行删除
+      try {
+        const result = await deleteAccount(verifyToken);
         renderAccount();
         if (result.authDeleted) {
           await showAlert("账号已永久删除，所有云端数据已清除。", { title: "完成", type: "info" });
