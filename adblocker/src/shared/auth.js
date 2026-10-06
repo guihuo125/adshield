@@ -26,7 +26,7 @@
     const m = String(msg);
     if (m.includes("Invalid login credentials")) return "邮箱或密码错误";
     if (m.includes("User already registered")) return "该邮箱已注册，请直接登录";
-    if (m.includes("Email not confirmed")) return "邮箱未验证，请检查邮箱";
+    if (m.includes("Email not confirmed")) return "邮箱未验证，请先到邮箱点击验证链接";
     if (m.includes("New password should be different from the old password")) return "新密码不能与旧密码相同";
     if (m.includes("原密码不正确")) return "原密码不正确";
     if (m.includes("Password should be at least")) return "密码至少 6 位";
@@ -578,6 +578,18 @@
     await sbRequest("/auth/v1/recover", {
       method: "POST",
       body: JSON.stringify({ email })
+    });
+    return true;
+  }
+
+  // ===== 重发验证邮件 =====
+  async function resendVerificationEmail(email) {
+    if (!isSupabaseReady()) {
+      throw new Error("本地演示模式暂不支持");
+    }
+    await sbRequest("/auth/v1/resend", {
+      method: "POST",
+      body: JSON.stringify({ type: "signup", email })
     });
     return true;
   }
@@ -1349,10 +1361,14 @@
             resolve({ email, mode: "login", result });
           } else {
             // 注册成功：自动切换到登录页（预填邮箱 + 提示）
+            const needVerify = !!(result && result.needVerify);
+            const noticeText = needVerify
+              ? "✅ 注册成功！验证邮件已发送到 " + email + "，请点击邮件中的链接完成验证，然后返回登录。"
+              : "✅ 注册成功，请登录";
             setTimeout(async () => {
               const loginResult = await showAuthDialog("login", {
                 email: email,
-                notice: "✅ 注册成功，请登录"
+                notice: noticeText
               });
               // 登录成功后（或取消后）刷新 UI
               renderAccount();
@@ -1361,8 +1377,45 @@
           }
         } catch (err) {
           console.error("[AdShield Auth] 失败:", err);
-          hint.textContent = translateError(err.message || err);
-          hint.classList.add("err");
+          const errMsg = String(err.message || err);
+          const isNotConfirmed = /email not confirmed|邮箱未验证/i.test(errMsg);
+          hint.innerHTML = "";
+          hint.className = "auth-hint err";
+          const msgSpan = document.createElement("span");
+          msgSpan.textContent = translateError(errMsg);
+          hint.appendChild(msgSpan);
+          // 未验证邮箱：提供重发按钮
+          if (isNotConfirmed && isLogin) {
+            const resendLink = document.createElement("a");
+            resendLink.href = "#";
+            resendLink.className = "auth-notice-resend";
+            resendLink.textContent = "重新发送验证邮件";
+            resendLink.addEventListener("click", async (e) => {
+              e.preventDefault();
+              resendLink.textContent = "发送中...";
+              try {
+                await resendVerificationEmail(email);
+                resendLink.textContent = "✅ 已重新发送";
+                resendLink.style.color = "#067307";
+                setTimeout(() => {
+                  resendLink.textContent = "重新发送验证邮件";
+                  resendLink.style.color = "";
+                }, 3000);
+              } catch (e2) {
+                const m = String(e2.message || e2);
+                if (/rate limit|email rate/i.test(m)) {
+                  resendLink.textContent = "⏱ 发送过于频繁，请稍后再试";
+                } else {
+                  resendLink.textContent = "❌ 发送失败：" + (e2.message || e2);
+                }
+                setTimeout(() => {
+                  resendLink.textContent = "重新发送验证邮件";
+                }, 5000);
+              }
+            });
+            hint.appendChild(document.createElement("br"));
+            hint.appendChild(resendLink);
+          }
           btnConfirm.disabled = false;
           btnConfirm.textContent = isLogin ? "登录" : "注册";
         }
