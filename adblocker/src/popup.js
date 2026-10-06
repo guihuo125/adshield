@@ -8,7 +8,8 @@ const DEFAULT_SETTINGS = {
   rulesets: { ads: true, tracking: true, annoyances: true, url_clean: true, malware: true },
   antiDetect: true,
   assist: true,
-  showBadge: true
+  showBadge: true,
+  theme: "auto"
 };
 const RULESETS = [
   { id: "ads",        label: "广告拦截",   color: "#FD3638" },

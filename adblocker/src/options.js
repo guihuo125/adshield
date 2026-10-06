@@ -8,7 +8,8 @@ const DEFAULT_SETTINGS = {
   rulesets: { ads: true, tracking: true, annoyances: true, url_clean: true, malware: true },
   antiDetect: true,
   assist: true,
-  showBadge: true
+  showBadge: true,
+  theme: "auto"
 };
 const RULESETS = [
   { id: "ads",        label: "广告拦截", desc: "拦截横幅、弹窗、视频贴片等展示广告",       color: "#FD3638" },
@@ -972,6 +973,9 @@ async function render() {
   const s = await readSettings();
   const paused = s.globalPausedUntil && s.globalPausedUntil > Date.now();
 
+  // 主题分段按钮
+  updateThemeSegUI(s.theme || "auto");
+
   // 基础状态
   const swMap = {
     "#swGlobal": s.enabled,
@@ -1011,6 +1015,7 @@ async function render() {
   renderReport();
   loadUserRules();
   loadSubscriptions();
+  renderCosmeticRules();
 }
 
 /* ---------- 开关事件 ---------- */
@@ -1041,6 +1046,30 @@ $("#swGlobalPause").addEventListener("change", async (e) => {
   await writeSettings(s);
   render();
 });
+
+/* ---------- 主题切换 ---------- */
+function updateThemeSegUI(theme) {
+  const seg = $("#themeSegmented");
+  if (!seg) return;
+  seg.querySelectorAll(".theme-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.getAttribute("data-theme-value") === theme);
+  });
+}
+const themeSeg = $("#themeSegmented");
+if (themeSeg) {
+  themeSeg.querySelectorAll(".theme-btn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const theme = btn.getAttribute("data-theme-value");
+      const s = await readSettings();
+      s.theme = theme;
+      await writeSettings(s);
+      if (window.__adshield_theme__) {
+        window.__adshield_theme__.apply(theme);
+      }
+      updateThemeSegUI(theme);
+    });
+  });
+}
 
 /* ---------- 规则订阅管理 ---------- */
 function fmtTime(ts) {
@@ -1319,12 +1348,108 @@ if (saveBtn) {
     } else {
       st.title = "";
     }
+
+    // 刷新元素隐藏规则列表
+    await renderCosmeticRules();
   });
 }
 const clearBtn = $("#clearBtn");
 if (clearBtn) {
   clearBtn.addEventListener("click", () => {
     $("#rulesInput").value = "";
+  });
+}
+
+/* ---------- 元素隐藏规则管理 ---------- */
+async function renderCosmeticRules() {
+  const store = await chrome.storage.local.get("adshield_user_cosmetic");
+  const rules = store.adshield_user_cosmetic || [];
+  const listEl = $("#cosmeticRulesList");
+  const emptyEl = $("#cosmeticRulesEmpty");
+  if (!listEl || !emptyEl) return;
+
+  const countEl = $("#cosmeticCount");
+  if (countEl) countEl.textContent = rules.length;
+
+  listEl.innerHTML = "";
+  if (!rules.length) {
+    emptyEl.style.display = "block";
+    listEl.style.display = "none";
+    return;
+  }
+  emptyEl.style.display = "none";
+  listEl.style.display = "flex";
+
+  rules.forEach((raw, idx) => {
+    if (typeof raw !== "string") return;
+    const li = document.createElement("li");
+    li.className = "cosmetic-item";
+
+    const idx2 = raw.indexOf("##");
+    const domainsPart = idx2 >= 0 ? raw.slice(0, idx2).trim() : "";
+    const selector = idx2 >= 0 ? raw.slice(idx2 + 2).trim() : raw;
+
+    let domainHtml;
+    if (!domainsPart) {
+      domainHtml = '<span class="cosmetic-global">全局</span>';
+    } else {
+      domainHtml = '<span class="cosmetic-domain">' + escapeHtml(domainsPart) + '</span>';
+    }
+
+    li.innerHTML =
+      '<div class="cosmetic-item-text">' +
+        domainHtml +
+        '<span class="cosmetic-selector">##' + escapeHtml(selector) + '</span>' +
+      '</div>' +
+      '<button class="cosmetic-remove" data-idx="' + idx + '">删除</button>';
+
+    li.querySelector(".cosmetic-remove").addEventListener("click", async () => {
+      const cur = await chrome.storage.local.get("adshield_user_cosmetic");
+      const arr = cur.adshield_user_cosmetic || [];
+      arr.splice(idx, 1);
+      await chrome.storage.local.set({ "adshield_user_cosmetic": arr });
+      // 同步：从 user_rules 里删掉这一条
+      const store2 = await chrome.storage.local.get("adshield_user_rules");
+      const userRules = (store2.adshield_user_rules || []).filter(r => r !== raw);
+      await chrome.storage.local.set({ "adshield_user_rules": userRules });
+      // 重新触发应用
+      await chrome.runtime.sendMessage({ type: "saveUserRules", rules: userRules });
+      // 重新渲染
+      await renderCosmeticRules();
+      await loadUserRules();
+    });
+
+    listEl.appendChild(li);
+  });
+}
+
+function escapeHtml(s) {
+  return String(s)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+// 导出元素隐藏规则
+const exportCosmeticBtn = $("#exportCosmeticBtn");
+if (exportCosmeticBtn) {
+  exportCosmeticBtn.addEventListener("click", async () => {
+    const store = await chrome.storage.local.get("adshield_user_cosmetic");
+    const rules = store.adshield_user_cosmetic || [];
+    if (!rules.length) {
+      alert("暂无元素隐藏规则");
+      return;
+    }
+    const text = rules.join("\n");
+    const blob = new Blob([text], { type: "text/plain" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "adshield-cosmetic-" + Date.now() + ".txt";
+    a.click();
+    URL.revokeObjectURL(url);
   });
 }
 

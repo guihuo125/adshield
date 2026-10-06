@@ -149,11 +149,11 @@
 .adshield-modal-message::-webkit-scrollbar-thumb:hover {
   background: rgba(0,0,0,.25);
 }
-@media (prefers-color-scheme: dark) {
-  .adshield-modal-message::-webkit-scrollbar-thumb {
+
+html[data-theme="dark"] .adshield-modal-message::-webkit-scrollbar-thumb {
     background: rgba(255,255,255,.15);
   }
-}
+
 
 .adshield-modal-actions {
   display: flex;
@@ -205,15 +205,15 @@
 .adshield-modal-overlay[data-alert-only="true"] .adshield-modal-btn-confirm:hover {
   background: #e0e2e5;
 }
-@media (prefers-color-scheme: dark) {
-  .adshield-modal-overlay[data-alert-only="true"] .adshield-modal-btn-confirm {
+
+html[data-theme="dark"] .adshield-modal-overlay[data-alert-only="true"] .adshield-modal-btn-confirm {
     background: #3f4146;
     color: #e6e8ea;
   }
-  .adshield-modal-overlay[data-alert-only="true"] .adshield-modal-btn-confirm:hover {
+html[data-theme="dark"] .adshield-modal-overlay[data-alert-only="true"] .adshield-modal-btn-confirm:hover {
     background: #4a4d52;
   }
-}
+
 .adshield-modal-overlay[data-type="warning"] .adshield-modal-btn-confirm {
   background: #f79009;
 }
@@ -228,24 +228,24 @@
 }
 
 /* 深色模式 */
-@media (prefers-color-scheme: dark) {
-  .adshield-modal {
+
+html[data-theme="dark"] .adshield-modal {
     background: #2f3136;
   }
-  .adshield-modal-overlay[data-size="large"] .adshield-modal-actions {
+html[data-theme="dark"] .adshield-modal-overlay[data-size="large"] .adshield-modal-actions {
     border-top-color: rgba(255,255,255,.08);
   }
-  .adshield-modal-title {
+html[data-theme="dark"] .adshield-modal-title {
     color: #e6e8ea;
   }
-  .adshield-modal-message {
+html[data-theme="dark"] .adshield-modal-message {
     color: #a4a6a8;
   }
-  .adshield-modal-btn-cancel {
+html[data-theme="dark"] .adshield-modal-btn-cancel {
     background: #3f4146;
     color: #e6e8ea;
   }
-  .adshield-modal-btn-cancel:hover {
+html[data-theme="dark"] .adshield-modal-btn-cancel:hover {
     background: #4a4d52;
   }
-}
+

@@ -1,9 +1,10 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="auto">
 <head>
   <meta charset="UTF-8" />
   <meta name="color-scheme" content="light dark" />
   <title>AdShield 设置</title>
+  <script src="shared/theme.js"></script>
   <link rel="stylesheet" href="options.css" />
   <link rel="stylesheet" href="shared/modal.css" />
 </head>
@@ -77,6 +78,28 @@
 
     <!-- ============ 主区 ============ -->
     <main class="content">
+      <div class="content-topbar">
+        <div class="theme-segmented" id="themeSegmented">
+          <button type="button" class="theme-btn" data-theme-value="light" title="亮色">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <circle cx="12" cy="12" r="4"/>
+              <path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M4.93 19.07l1.41-1.41M17.66 6.34l1.41-1.41"/>
+            </svg>
+          </button>
+          <button type="button" class="theme-btn" data-theme-value="auto" title="跟随系统">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="2" y="4" width="20" height="13" rx="2"/>
+              <line x1="8" y1="21" x2="16" y2="21"/>
+              <line x1="12" y1="17" x2="12" y2="21"/>
+            </svg>
+          </button>
+          <button type="button" class="theme-btn" data-theme-value="dark" title="暗色">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
 
       <!-- ================ 常规设置 ================ -->
       <section class="panel active" data-panel="privacy">
@@ -156,7 +179,6 @@
             <div class="fc-desc">在工具栏图标上显示当前页面已拦截的请求数。</div>
           </div>
 
-          <div class="feature-card feature-card-placeholder"></div>
         </div>
 
         <div class="rule-item-static">
@@ -224,11 +246,31 @@
         <div class="card">
           <div class="card-title">自定义拦截规则</div>
           <div class="card-sub">每行一条。保存后会立即通过 declarativeNetRequest 动态规则生效，无需重新加载扩展。</div>
-          <textarea id="rulesInput" spellcheck="false" placeholder="||ads.example.com^&#10;/banner/&#10;! 这是注释"></textarea>
+          <textarea id="rulesInput" spellcheck="false" placeholder="||ads.example.com^&#10;/banner/&#10;example.com##.ad&#10;! 这是注释"></textarea>
           <div class="actions">
             <button id="saveBtn" class="btn-primary">保存并应用</button>
             <button id="clearBtn" class="btn-secondary">清空</button>
             <span id="status" class="status"></span>
+          </div>
+
+          <div class="cosmetic-subsection">
+            <div class="cosmetic-subsection-head">
+              <div class="cosmetic-subsection-title">
+                已解析的元素隐藏规则
+                <span class="cosmetic-count" id="cosmeticCount">0</span>
+              </div>
+              <button class="card-action" id="exportCosmeticBtn" title="导出为 TXT">
+                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                  <polyline points="7 10 12 15 17 10"/>
+                  <line x1="12" y1="15" x2="12" y2="3"/>
+                </svg>
+                导出
+              </button>
+            </div>
+            <div class="cosmetic-subsection-sub">来自上方输入框的 <code>##</code> 规则（如 <code>example.com##.ad</code>），会在对应网站自动隐藏元素。</div>
+            <div id="cosmeticRulesEmpty" class="cosmetic-empty">暂无元素隐藏规则。在上方输入框添加 <code>##</code> 规则即可。</div>
+            <ul id="cosmeticRulesList" class="cosmetic-list"></ul>
           </div>
         </div>
 

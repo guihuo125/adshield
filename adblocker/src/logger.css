@@ -10,15 +10,15 @@
   --text-tertiary: var(--color-gray-500); --border-primary: var(--color-gray-200);
   --font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
 }
-@media (prefers-color-scheme: dark) {
-  :root {
+
+html[data-theme="dark"] {
     --bg-primary: var(--color-gray-800); --bg-secondary: var(--color-gray-900);
     --bg-tertiary: var(--color-gray-700);
     --text-primary: #ffffff; --text-secondary: var(--color-gray-300);
     --text-tertiary: var(--color-gray-400); --border-primary: var(--color-gray-600);
     --color-brand-600: var(--color-brand-400);
   }
-}
+
 body {
   font-family: var(--font-family); background: var(--bg-secondary); color: var(--text-primary);
   font-size: 13px; -webkit-font-smoothing: antialiased; padding: 20px; min-height: 100vh;
@@ -70,11 +70,11 @@ tr:hover td { background: var(--bg-secondary); }
 .cat-annoyances { background: #ffedd5; color: #c2410c; }
 .cat-url_clean  { background: #cffafe; color: #0369a1; }
 .cat-malware    { background: #fee2e2; color: #991b1b; }
-@media (prefers-color-scheme: dark) {
-  .cat-ads        { background: rgba(253,54,56,.2); color: #fca5a5; }
-  .cat-tracking   { background: rgba(124,58,237,.2); color: #c4b5fd; }
-  .cat-annoyances { background: rgba(247,144,9,.2); color: #fdba74; }
-  .cat-url_clean  { background: rgba(0,174,240,.2); color: #7dd3fc; }
-  .cat-malware    { background: rgba(153,27,27,.3); color: #fecaca; }
-}
+
+html[data-theme="dark"] .cat-ads { background: rgba(253,54,56,.2); color: #fca5a5; }
+html[data-theme="dark"] .cat-tracking { background: rgba(124,58,237,.2); color: #c4b5fd; }
+html[data-theme="dark"] .cat-annoyances { background: rgba(247,144,9,.2); color: #fdba74; }
+html[data-theme="dark"] .cat-url_clean { background: rgba(0,174,240,.2); color: #7dd3fc; }
+html[data-theme="dark"] .cat-malware { background: rgba(153,27,27,.3); color: #fecaca; }
+
 .empty-tip { padding: 40px; text-align: center; color: var(--text-tertiary); font-size: 13px; }

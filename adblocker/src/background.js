@@ -15,6 +15,7 @@ const DEFAULT_SETTINGS = {
   antiDetect: true,
   assist: true,
   showBadge: true,
+  theme: "auto",
   assistedSites: [],   // 浏览助手触发历史：[{ host, ts, until, reason }]
   // 订阅更新
   subscriptions: [],           // [{ id, name, url, enabled, lastUpdate, lastCount, lastError }]
