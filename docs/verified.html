@@ -424,13 +424,35 @@
     }
 
     function tryClose() {
-      window.close();
+      const btn = document.querySelector('.btn');
+      const originalHtml = btn ? btn.innerHTML : "";
+      if (btn) btn.disabled = true;
+
+      // 尝试 1: 直接关闭（脚本打开的窗口会成功）
+      let closed = false;
+      try {
+        window.close();
+        closed = true;
+      } catch (e) {}
+
+      // 尝试 2: 若未关闭，100ms 后返回上一页（用户从邮箱点来）
       setTimeout(() => {
-        const btn = document.querySelector('.btn');
-        if (btn) {
-          btn.outerHTML = '<div style="padding:14px;background:#e7f6fe;color:#0077cc;border-radius:12px;font-size:13.5px;font-weight:600;">✓ 验证已完成，请手动关闭此标签页</div>';
+        // 如果页面已不可见，说明已关闭
+        if (document.hidden || document.visibilityState === 'hidden') return;
+
+        if (window.history.length > 1) {
+          history.back();
         }
-      }, 200);
+
+        // 尝试 3: 若仍在此页面，300ms 后提示用户手动关闭
+        setTimeout(() => {
+          if (document.hidden || document.visibilityState === 'hidden') return;
+          if (btn) {
+            btn.disabled = false;
+            btn.outerHTML = '<div style="display:flex;align-items:center;justify-content:center;gap:8px;width:100%;padding:14px 24px;background:#e7f6fe;color:#0077cc;border-radius:12px;font-size:14px;font-weight:600;">✓ 验证已完成，请关闭此标签页</div>';
+          }
+        }, 400);
+      }, 150);
     }
   </script>
 </body>
