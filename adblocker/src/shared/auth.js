@@ -616,36 +616,83 @@
   }
 
   // ===== 删除账号 =====
+  // 返回 { ok, configDeleted, authDeleted, mode, errors: [] }
   async function deleteAccount() {
     const state = await getAuthState();
     if (!state) throw new Error("未登录");
+
     if (state.mode === "local") {
-      // 本地模式：仅清状态
       await setAuthState(null);
-      return true;
+      return { ok: true, configDeleted: false, authDeleted: false, mode: "local", errors: [] };
     }
-    // 1) 删除云端数据
+
+    const result = { ok: false, configDeleted: false, authDeleted: false, mode: "supabase", errors: [] };
+
+    // 0) 尝试用 refresh_token 换新 access_token（避免 token 过期）
+    let token = state.token;
+    if (state.refreshToken) {
+      try {
+        const r = await fetch(SUPABASE_URL + "/auth/v1/token?grant_type=refresh_token", {
+          method: "POST",
+          headers: { "apikey": SUPABASE_ANON_KEY, "Content-Type": "application/json" },
+          body: JSON.stringify({ refresh_token: state.refreshToken })
+        });
+        if (r.ok) {
+          const d = await r.json();
+          if (d.access_token) token = d.access_token;
+        }
+      } catch (e) { /* 忽略，继续用旧 token */ }
+    }
+
+    // 1) 删除云端配置数据（adshield_configs）
     try {
-      await fetch(SUPABASE_URL + SUPABASE_TABLE + "?user_id=eq." + state.userId, {
+      const resp = await fetch(SUPABASE_URL + SUPABASE_TABLE + "?user_id=eq." + state.userId, {
         method: "DELETE",
         headers: {
           "apikey": SUPABASE_ANON_KEY,
-          "Authorization": "Bearer " + state.token
+          "Authorization": "Bearer " + token
         }
       });
-    } catch (e) {}
-    // 2) 调用 Supabase 删除用户（需要 service_role 权限，可能失败）
-    try {
-      await sbRequest("/auth/v1/user", {
-        method: "DELETE",
-        headers: { "Authorization": "Bearer " + state.token }
-      });
+      if (resp.ok || resp.status === 204) {
+        result.configDeleted = true;
+      } else {
+        const d = await resp.json().catch(() => ({}));
+        result.errors.push("配置数据: " + (d.message || d.hint || ("HTTP " + resp.status)));
+      }
     } catch (e) {
-      // 忽略（通常需要 service_role key）
+      result.errors.push("配置数据: " + (e.message || e));
     }
-    // 3) 清本地状态
+
+    // 2) 调用 RPC 删除 Supabase Auth 用户（用户可删除自己）
+    try {
+      const resp = await fetch(SUPABASE_URL + "/rest/v1/rpc/delete_own_account", {
+        method: "POST",
+        headers: {
+          "apikey": SUPABASE_ANON_KEY,
+          "Authorization": "Bearer " + token,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({})
+      });
+      if (resp.ok) {
+        const d = await resp.json().catch(() => ({}));
+        if (d && d.ok) {
+          result.authDeleted = true;
+        } else {
+          result.errors.push("账号: " + (d && d.error || "RPC 返回失败"));
+        }
+      } else {
+        const d = await resp.json().catch(() => ({}));
+        result.errors.push("账号: " + (d.message || d.hint || d.error || ("HTTP " + resp.status)));
+      }
+    } catch (e) {
+      result.errors.push("账号: " + (e.message || e));
+    }
+
+    // 3) 无论云端是否成功，都清本地登录状态
     await setAuthState(null);
-    return true;
+    result.ok = result.authDeleted;
+    return result;
   }
 
   // ===== 处理密码重置回跳 =====
@@ -1682,9 +1729,23 @@
       );
       if (!ok2) return;
       try {
-        await deleteAccount();
+        const result = await deleteAccount();
         renderAccount();
-        await showAlert("账号已删除。", { title: "完成", type: "info" });
+        if (result.authDeleted) {
+          await showAlert("账号已永久删除，所有云端数据已清除。", { title: "完成", type: "info" });
+        } else if (result.configDeleted) {
+          let msg = "已清空云端配置并退出登录。";
+          if (result.errors.length) {
+            msg += "\n\n账号记录未能删除：\n" + result.errors.join("\n");
+          }
+          await showAlert(msg, { title: "部分完成", type: "warning" });
+        } else {
+          let msg = "删除未完成。已退出登录。";
+          if (result.errors.length) {
+            msg += "\n\n" + result.errors.join("\n");
+          }
+          await showAlert(msg, { title: "删除失败", type: "danger" });
+        }
       } catch (e) {
         await showAlert("删除失败：" + (e.message || e), { title: "错误", type: "danger" });
       }

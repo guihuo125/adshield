@@ -81,14 +81,16 @@
       requestAnimationFrame(() => el.classList.add("open"));
 
       function cleanup(result) {
-        el.classList.remove("open");
+        const cur = el;   // 捕获当前 overlay 引用（避免被新的 showConfirm 覆盖）
+        cur.classList.remove("open");
         btnConfirm.removeEventListener("click", onConfirm);
         btnCancel.removeEventListener("click", onCancel);
-        overlay.removeEventListener("click", onOverlayClick);
+        cur.removeEventListener("click", onOverlayClick);
         document.removeEventListener("keydown", onKey);
+        // 立即置 null → 让下一次 showConfirm 创建新 overlay
+        if (overlay === cur) overlay = null;
         setTimeout(() => {
-          if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
-          overlay = null;
+          if (cur && cur.parentNode) cur.parentNode.removeChild(cur);
         }, 180);
         resolve(result);
       }
