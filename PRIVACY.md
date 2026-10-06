@@ -85,7 +85,7 @@ AdShield（以下简称"本扩展"）尊重并保护用户隐私。本政策说�
 ## 九、联系方式
 
 - **GitHub Issues**：https://github.com/guihuo125/adshield/issues
-- **邮箱**：guihuo125@users.noreply.github.com
+- **邮箱**：3900704329@qq.com
 
 ---
 
