@@ -73,15 +73,56 @@ $("#refreshBtn").addEventListener("click", load);
 $("#filterInput").addEventListener("input", render);
 $("#catFilter").addEventListener("change", render);
 
-$("#exportBtn").addEventListener("click", () => {
+// 导出 JSON
+$("#exportJsonBtn").addEventListener("click", () => {
   const blob = new Blob([JSON.stringify(allLogs, null, 2)], { type: "application/json" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
-  a.download = "adshield-logs-" + Date.now() + ".json";
+  a.download = "adshield-logs-" + fmtDate() + ".json";
   a.click();
   URL.revokeObjectURL(url);
 });
+
+// 导出 CSV
+$("#exportCsvBtn").addEventListener("click", () => {
+  if (!allLogs.length) {
+    showAlert("暂无日志可导出", { title: "提示", type: "info" });
+    return;
+  }
+  const CAT_LABEL = { ads: "广告", tracking: "追踪", annoyances: "干扰", url_clean: "URL 清理", malware: "恶意" };
+  // CSV 转义：双引号包裹 + 内部双引号变两个
+  function csvEsc(s) {
+    return '"' + String(s == null ? "" : s).replace(/"/g, '""') + '"';
+  }
+  const header = ["时间", "分类", "被拦截 URL", "来源页面"];
+  const rows = [header.map(csvEsc).join(",")];
+  for (const l of allLogs) {
+    rows.push([
+      csvEsc(new Date(l.ts).toLocaleString("zh-CN")),
+      csvEsc(CAT_LABEL[l.cat] || l.cat || "未知"),
+      csvEsc(l.url || ""),
+      csvEsc(l.pageHost || "")
+    ].join(","));
+  }
+  // ﻿ = BOM，让 Excel 正确识别 UTF-8 中文
+  const csv = "\uFEFF" + rows.join("\r\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = "adshield-logs-" + fmtDate() + ".csv";
+  a.click();
+  URL.revokeObjectURL(url);
+});
+
+// 日期格式：YYYY-MM-DD_HHmm
+function fmtDate() {
+  const d = new Date();
+  const pad = (n) => String(n).padStart(2, "0");
+  return d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate()) +
+    "_" + pad(d.getHours()) + pad(d.getMinutes());
+}
 
 $("#clearBtn").addEventListener("click", async () => {
   const ok = await showConfirm("确定清空所有日志？", {

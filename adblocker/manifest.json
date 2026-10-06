@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "__MSG_extensionName__",
-  "version": "2.9.14",
+  "version": "2.9.69",
   "description": "__MSG_extensionDescription__",
   "default_locale": "zh_CN",
   "permissions": [
@@ -10,7 +10,8 @@
     "storage",
     "alarms",
     "contextMenus",
-    "scripting"
+    "scripting",
+    "notifications"
   ],
   "host_permissions": [
     "<all_urls>"

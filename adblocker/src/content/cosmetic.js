@@ -354,7 +354,7 @@
           '<button style="background:none;border:none;cursor:pointer;color:#88898c;font-size:18px;line-height:1;padding:0;margin-top:-2px" data-close>×</button>';
         document.body.appendChild(bar);
         bar.querySelector("[data-close]").addEventListener("click", () => bar.remove());
-        setTimeout(() => { try { bar.remove(); } catch (e) {} }, 10000);
+        setTimeout(() => { try { bar.remove(); } catch (e) {} }, 5000);
       } catch (e) {}
     }
 

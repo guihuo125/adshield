@@ -407,7 +407,27 @@
 
   // ===== UI 渲染 =====
   async function renderAccount() {
-    const state = await getAuthState();
+    // 会话超时检查（30 天未活动则自动登出）
+    const sess = await checkSessionValidity();
+    let state;
+    if (sess.valid) {
+      state = await getAuthState();
+    } else {
+      state = null;
+      if (sess.reason === "expired") {
+        // 静默过期提示（只弹一次）
+        try {
+          const flag = "adshield_session_expired_notified";
+          const st = await chrome.storage.local.get(flag);
+          if (!st[flag]) {
+            await chrome.storage.local.set({ [flag]: Date.now() });
+            setTimeout(() => {
+              showAlert("登录已过期，请重新登录。", { title: "会话超时", type: "warning" });
+            }, 500);
+          }
+        } catch (e) {}
+      }
+    }
     const guest = document.getElementById("accountGuest");
     const user = document.getElementById("accountUser");
     const badge = document.getElementById("navAccountBadge");
@@ -488,8 +508,138 @@
   function validateEmail(email) {
     return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
   }
+  // 登录校验（宽松，兼容老用户）
   function validatePassword(pwd) {
     return typeof pwd === "string" && pwd.length >= 6;
+  }
+
+  // 新密码策略（严格，仅用于注册 / 重置 / 改密）
+  function validateNewPassword(pwd) {
+    if (typeof pwd !== "string") return { ok: false, reason: "密码格式错误" };
+    if (pwd.length < 8) return { ok: false, reason: "密码至少 8 位" };
+    if (pwd.length > 128) return { ok: false, reason: "密码不能超过 128 位" };
+    if (!/[A-Z]/.test(pwd)) return { ok: false, reason: "需含至少 1 个大写字母" };
+    if (!/[a-z]/.test(pwd)) return { ok: false, reason: "需含至少 1 个小写字母" };
+    if (!/[0-9]/.test(pwd)) return { ok: false, reason: "需含至少 1 个数字" };
+    // 拒绝常见弱密码
+    const COMMON = ["password", "12345678", "qwerty123", "abc12345", "admin123", "11111111", "password1", "123456789"];
+    if (COMMON.includes(pwd.toLowerCase())) return { ok: false, reason: "密码过于简单，请更换" };
+    return { ok: true };
+  }
+
+  // 渲染密码强度条（DOM 显示）
+  function renderStrength(el, pwd) {
+    if (!el) return;
+    const s = evalPasswordStrength(pwd);
+    if (!pwd) { el.innerHTML = ""; el.classList.remove("show"); return; }
+    el.classList.add("show");
+    el.innerHTML =
+      '<div class="pwd-strength-bar">' +
+        '<div class="pwd-strength-fill" data-level="' + s.level + '"></div>' +
+      '</div>' +
+      '<div class="pwd-strength-label" data-level="' + s.level + '">' +
+        s.label +
+        (s.tips.length ? '<span class="pwd-strength-tips">· ' + s.tips.slice(0, 2).join(" / ") + '</span>' : '') +
+      '</div>';
+  }
+
+  // 密码强度评估（实时反馈）
+  function evalPasswordStrength(pwd) {
+    if (!pwd) return { score: 0, level: "empty", label: "", tips: [] };
+    let score = 0;
+    const tips = [];
+    if (pwd.length >= 8) score += 1; else tips.push("至少 8 位");
+    if (pwd.length >= 12) score += 1;
+    if (/[a-z]/.test(pwd)) score += 1; else tips.push("含小写字母");
+    if (/[A-Z]/.test(pwd)) score += 1; else tips.push("含大写字母");
+    if (/[0-9]/.test(pwd)) score += 1; else tips.push("含数字");
+    if (/[^a-zA-Z0-9]/.test(pwd)) score += 1; else tips.push("含特殊字符");
+
+    let level, label;
+    if (score <= 2) { level = "weak"; label = "弱"; }
+    else if (score <= 4) { level = "medium"; label = "中"; }
+    else { level = "strong"; label = "强"; }
+    return { score, level, label, tips };
+  }
+
+  // ===== 登录失败锁定 =====
+  const LOGIN_FAIL_KEY = "adshield_login_fails";
+  const MAX_FAILS = 5;
+  const LOCK_DURATION = 15 * 60 * 1000;   // 15 分钟
+
+  async function getLoginFails(email) {
+    if (!email) return { count: 0, until: 0 };
+    const store = await chrome.storage.local.get(LOGIN_FAIL_KEY);
+    const map = store[LOGIN_FAIL_KEY] || {};
+    return map[email.toLowerCase()] || { count: 0, until: 0 };
+  }
+
+  async function recordLoginFail(email) {
+    if (!email) return;
+    const store = await chrome.storage.local.get(LOGIN_FAIL_KEY);
+    const map = store[LOGIN_FAIL_KEY] || {};
+    const key = email.toLowerCase();
+    const entry = map[key] || { count: 0, until: 0 };
+    entry.count = (entry.count || 0) + 1;
+    entry.lastFail = Date.now();
+    if (entry.count >= MAX_FAILS) {
+      entry.until = Date.now() + LOCK_DURATION;
+      entry.count = 0;
+    }
+    map[key] = entry;
+    await chrome.storage.local.set({ [LOGIN_FAIL_KEY]: map });
+  }
+
+  async function clearLoginFail(email) {
+    if (!email) return;
+    const store = await chrome.storage.local.get(LOGIN_FAIL_KEY);
+    const map = store[LOGIN_FAIL_KEY] || {};
+    delete map[email.toLowerCase()];
+    await chrome.storage.local.set({ [LOGIN_FAIL_KEY]: map });
+  }
+
+  async function checkLoginLock(email) {
+    const e = await getLoginFails(email);
+    if (e.until && e.until > Date.now()) {
+      const mins = Math.ceil((e.until - Date.now()) / 60000);
+      return { locked: true, mins, until: e.until };
+    }
+    return { locked: false, remaining: MAX_FAILS - (e.count || 0) };
+  }
+
+  // ===== 会话超时 =====
+  const SESSION_MAX_AGE = 30 * 24 * 60 * 60 * 1000;   // 30 天
+
+  async function checkSessionValidity() {
+    const state = await getAuthState();
+    if (!state) return { valid: false, reason: "not-logged-in" };
+    if (state.mode === "local") return { valid: true };
+    const loginAt = state.loginAt || 0;
+    if (loginAt && Date.now() - loginAt > SESSION_MAX_AGE) {
+      await doLogout();
+      return { valid: false, reason: "expired" };
+    }
+    return { valid: true };
+  }
+
+  // ===== 登录尝试日志 =====
+  const LOGIN_LOG_KEY = "adshield_login_log";
+  function maskEmail(email) {
+    if (!email) return "";
+    const parts = email.split("@");
+    if (parts.length !== 2) return email;
+    const u = parts[0], d = parts[1];
+    const masked = u.length <= 2 ? (u[0] || "") + "*" : u[0] + "***" + u.slice(-1);
+    return masked + "@" + d;
+  }
+  async function logLoginAttempt(email, ok, reason) {
+    try {
+      const store = await chrome.storage.local.get(LOGIN_LOG_KEY);
+      const log = store[LOGIN_LOG_KEY] || [];
+      log.push({ ts: Date.now(), email: maskEmail(email), ok: !!ok, reason: reason || "" });
+      if (log.length > 50) log.splice(0, log.length - 50);
+      await chrome.storage.local.set({ [LOGIN_LOG_KEY]: log });
+    } catch (e) {}
   }
 
   // ===== Supabase API 调用（未配置时走本地模式）=====
@@ -518,6 +668,16 @@
 
   // ===== 登录 / 注册 =====
   async function doLogin(email, password) {
+    // 0) 检查登录锁定
+    const lock = await checkLoginLock(email);
+    if (lock.locked) {
+      await logLoginAttempt(email, false, "locked");
+      const err = new Error("账号已锁定，请 " + lock.mins + " 分钟后重试");
+      err.code = "LOCKED";
+      err.mins = lock.mins;
+      throw err;
+    }
+
     if (!isSupabaseReady()) {
       // 本地模式：直接假登录
       await setAuthState({
@@ -528,31 +688,60 @@
       });
       return { ok: true, mode: "local" };
     }
+
     // 真实模式
-    const data = await sbRequest("/auth/v1/token?grant_type=password", {
-      method: "POST",
-      body: JSON.stringify({ email, password })
-    });
-    await setAuthState({
-      email: data.user && data.user.email || email,
-      token: data.access_token,
-      refreshToken: data.refresh_token,
-      userId: data.user && data.user.id,
-      loginAt: Date.now(),
-      lastSyncAt: Date.now(),   // ← 登录时记录，避免首次打开误提示
-      mode: "supabase"
-    });
-    // 上报设备
-    await reportDevice(data.access_token, data.user && data.user.id);
-    // 关键：刷新 UI
-    renderAccount();
-    return { ok: true, mode: "supabase" };
+    try {
+      const data = await sbRequest("/auth/v1/token?grant_type=password", {
+        method: "POST",
+        body: JSON.stringify({ email, password })
+      });
+      // 关键：先写 authState（后续 renderAccount 需要）
+      await setAuthState({
+        email: data.user && data.user.email || email,
+        token: data.access_token,
+        refreshToken: data.refresh_token,
+        userId: data.user && data.user.id,
+        loginAt: Date.now(),
+        lastSyncAt: Date.now(),
+        mode: "supabase"
+      });
+      // 立即渲染 UI（不等待后台操作）
+      renderAccount();
+      // 后台操作：并发执行，不阻塞登录返回
+      Promise.allSettled([
+        clearLoginFail(email),
+        logLoginAttempt(email, true, ""),
+        reportDevice(data.access_token, data.user && data.user.id)
+      ]).catch(() => {});
+      return { ok: true, mode: "supabase" };
+    } catch (e) {
+      const msg = String(e.message || e);
+      // 只有"密码错误 / 未验证"才计入失败次数（网络错误不算）
+      if (/invalid login credentials|email not confirmed|邮箱或密码错误/i.test(msg)) {
+        await recordLoginFail(email);
+        await logLoginAttempt(email, false, msg);
+        const after = await getLoginFails(email);
+        const remaining = MAX_FAILS - (after.count || 0);
+        if (remaining > 0 && remaining <= 2) {
+          e.remaining = remaining;
+        }
+      } else {
+        await logLoginAttempt(email, false, "network-error");
+      }
+      throw e;
+    }
   }
 
   async function doRegister(email, password) {
+    // 注册时使用严格密码策略
+    const pwdCheck = validateNewPassword(password);
+    if (!pwdCheck.ok) {
+      const err = new Error(pwdCheck.reason);
+      err.code = "WEAK_PASSWORD";
+      throw err;
+    }
     // 注册后不自动登录（让用户手动登录）
     if (!isSupabaseReady()) {
-      // 本地模式：只保存"已注册"标记，不登录
       return { ok: true, mode: "local", needVerify: false, registered: true, email };
     }
     const data = await sbRequest("/auth/v1/signup", {
@@ -866,11 +1055,12 @@
       <form class="auth-form" id="recForm" autocomplete="on">
         <div class="auth-field">
           <label class="auth-label">新密码</label>
-          <input type="password" class="auth-input" id="recPwd" placeholder="至少 6 位" required minlength="6" autocomplete="new-password" />
+          <input type="password" class="auth-input" id="recPwd" placeholder="至少 8 位，含大小写和数字" required minlength="8" maxlength="128" autocomplete="new-password" />
+          <div class="pwd-strength" id="recStrength"></div>
         </div>
         <div class="auth-field">
           <label class="auth-label">确认新密码</label>
-          <input type="password" class="auth-input" id="recPwd2" placeholder="再输一次" required minlength="6" autocomplete="new-password" />
+          <input type="password" class="auth-input" id="recPwd2" placeholder="再输一次" required minlength="8" maxlength="128" autocomplete="new-password" />
         </div>
         <div class="auth-hint" id="recHint"></div>
       </form>
@@ -900,6 +1090,7 @@
       const pwd = overlay.querySelector("#recPwd");
       const pwd2 = overlay.querySelector("#recPwd2");
       const hint = overlay.querySelector("#recHint");
+      const strengthEl = overlay.querySelector("#recStrength");
       const btnConfirm = overlay.querySelector("[data-confirm]");
 
       function cleanup() {
@@ -907,12 +1098,18 @@
         setTimeout(() => overlay.remove(), 180);
       }
 
+      // 实时强度
+      pwd.addEventListener("input", () => {
+        renderStrength(strengthEl, pwd.value);
+      });
+
       async function doSubmit() {
         const p1 = pwd.value;
         const p2 = pwd2.value;
         hint.textContent = "";
         hint.className = "auth-hint";
-        if (p1.length < 6) { hint.textContent = "密码至少 6 位"; hint.classList.add("err"); return; }
+        const check = validateNewPassword(p1);
+        if (!check.ok) { hint.textContent = check.reason; hint.classList.add("err"); return; }
         if (p1 !== p2) { hint.textContent = "两次密码不一致"; hint.classList.add("err"); return; }
 
         btnConfirm.disabled = true;
@@ -1037,6 +1234,49 @@
     });
     if (!resp.ok) throw new Error("移除失败：" + resp.status);
     return true;
+  }
+
+  // 简易 HTML 转义（本地工具函数）
+  function escapeHtmlSimple(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, c => (
+      { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
+    ));
+  }
+
+  // 渲染最近登录记录
+  async function renderLoginLog() {
+    const listEl = document.getElementById("loginLogList");
+    if (!listEl) return;
+    try {
+      const store = await chrome.storage.local.get(LOGIN_LOG_KEY);
+      const log = (store[LOGIN_LOG_KEY] || []).slice(-10).reverse();  // 最近 10 条，倒序
+      listEl.innerHTML = "";
+      if (!log.length) {
+        listEl.innerHTML = '<li class="login-log-empty">暂无登录记录</li>';
+        return;
+      }
+      for (const entry of log) {
+        const li = document.createElement("li");
+        li.className = "login-log-item";
+        const ok = !!entry.ok;
+        const iconSvg = ok
+          ? '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'
+          : '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+        const title = ok ? "登录成功" : "登录失败";
+        const timeText = relativeTime(entry.ts || 0);
+        const fullTime = entry.ts ? new Date(entry.ts).toLocaleString("zh-CN") : "";
+        const reasonText = !ok && entry.reason ? " · " + translateError(entry.reason) : "";
+        li.innerHTML =
+          '<div class="login-log-icon ' + (ok ? "ok" : "fail") + '">' + iconSvg + '</div>' +
+          '<div class="login-log-body">' +
+            '<div class="login-log-title">' + title + reasonText + '</div>' +
+            '<div class="login-log-time" title="' + escapeHtmlSimple(fullTime) + '">' + timeText + '</div>' +
+          '</div>';
+        listEl.appendChild(li);
+      }
+    } catch (e) {
+      listEl.innerHTML = '<li class="login-log-empty">加载失败</li>';
+    }
   }
 
   // 渲染设备列表
@@ -1273,11 +1513,12 @@
         </div>
         <div class="auth-field">
           <label class="auth-label">新密码</label>
-          <input type="password" class="auth-input" id="newPwd" placeholder="至少 6 位" required minlength="6" autocomplete="new-password" />
+          <input type="password" class="auth-input" id="newPwd" placeholder="至少 8 位，含大小写和数字" required minlength="8" maxlength="128" autocomplete="new-password" />
+          <div class="pwd-strength" id="newPwdStrength"></div>
         </div>
         <div class="auth-field">
           <label class="auth-label">确认新密码</label>
-          <input type="password" class="auth-input" id="newPwd2" placeholder="再输一次" required minlength="6" autocomplete="new-password" />
+          <input type="password" class="auth-input" id="newPwd2" placeholder="再输一次" required minlength="8" maxlength="128" autocomplete="new-password" />
         </div>
         <div class="auth-hint" id="pwdHint"></div>
       </form>
@@ -1310,8 +1551,13 @@
       const newPwd = overlay.querySelector("#newPwd");
       const newPwd2 = overlay.querySelector("#newPwd2");
       const hint = overlay.querySelector("#pwdHint");
+      const strengthEl = overlay.querySelector("#newPwdStrength");
       const btnConfirm = overlay.querySelector("[data-confirm]");
       const btnCancel = overlay.querySelector("[data-cancel]");
+
+      newPwd.addEventListener("input", () => {
+        renderStrength(strengthEl, newPwd.value);
+      });
 
       function cleanup() {
         overlay.classList.remove("open");
@@ -1330,7 +1576,8 @@
         hint.textContent = "";
         hint.className = "auth-hint";
         if (!oldP) { hint.textContent = "请输入原密码"; hint.classList.add("err"); return; }
-        if (p1.length < 6) { hint.textContent = "新密码至少 6 位"; hint.classList.add("err"); return; }
+        const check = validateNewPassword(p1);
+        if (!check.ok) { hint.textContent = check.reason; hint.classList.add("err"); return; }
         if (p1 !== p2) { hint.textContent = "两次新密码不一致"; hint.classList.add("err"); return; }
         if (oldP === p1) { hint.textContent = "新密码不能与原密码相同"; hint.classList.add("err"); return; }
 
@@ -1373,9 +1620,13 @@
         </div>
         <div class="auth-field">
           <label class="auth-label">密码</label>
-          <input type="password" class="auth-input" id="authPassword" placeholder="至少 6 位" required minlength="6" autocomplete="${isLogin ? "current-password" : "new-password"}" />
+          <input type="password" class="auth-input" id="authPassword"
+            placeholder="${isLogin ? "请输入密码" : "至少 8 位，含大小写和数字"}"
+            required minlength="${isLogin ? "1" : "8"}" maxlength="128"
+            autocomplete="${isLogin ? "current-password" : "new-password"}" />
+          <div class="pwd-strength" id="authPwdStrength"></div>
         </div>
-        ${isLogin ? "" : '<div class="auth-field"><label class="auth-label">确认密码</label><input type="password" class="auth-input" id="authPassword2" placeholder="再输一次" required minlength="6" autocomplete="new-password" /></div>'}
+        ${isLogin ? "" : '<div class="auth-field"><label class="auth-label">确认密码</label><input type="password" class="auth-input" id="authPassword2" placeholder="再输一次" required minlength="8" maxlength="128" autocomplete="new-password" /></div>'}
         <div class="auth-hint" id="authHint"></div>
         <div class="auth-switch">
           ${isLogin
@@ -1413,9 +1664,17 @@
       const emailInput = overlay.querySelector("#authEmail");
       const pwdInput = overlay.querySelector("#authPassword");
       const pwd2Input = overlay.querySelector("#authPassword2");
+      const pwdStrengthEl = overlay.querySelector("#authPwdStrength");
       const hint = overlay.querySelector("#authHint");
       const btnConfirm = overlay.querySelector("[data-confirm]");
       const btnCancel = overlay.querySelector("[data-cancel]");
+
+      // 注册时实时显示密码强度
+      if (!isLogin && pwdInput && pwdStrengthEl) {
+        pwdInput.addEventListener("input", () => {
+          renderStrength(pwdStrengthEl, pwdInput.value);
+        });
+      }
 
       function cleanup() {
         overlay.classList.remove("open");
@@ -1467,12 +1726,21 @@
           hint.classList.add("err");
           return;
         }
-        if (!validatePassword(pwd)) {
-          hint.textContent = "密码至少 6 位";
-          hint.classList.add("err");
-          return;
-        }
-        if (!isLogin) {
+        if (isLogin) {
+          // 登录：宽松校验（老用户密码可能不符新策略）
+          if (!validatePassword(pwd)) {
+            hint.textContent = "请输入密码";
+            hint.classList.add("err");
+            return;
+          }
+        } else {
+          // 注册：严格校验
+          const check = validateNewPassword(pwd);
+          if (!check.ok) {
+            hint.textContent = check.reason;
+            hint.classList.add("err");
+            return;
+          }
           if (pwd2Input && pwd2Input.value !== pwd) {
             hint.textContent = "两次密码不一致";
             hint.classList.add("err");
@@ -1512,7 +1780,12 @@
           hint.innerHTML = "";
           hint.className = "auth-hint err";
           const msgSpan = document.createElement("span");
-          msgSpan.textContent = translateError(errMsg);
+          let displayMsg = translateError(errMsg);
+          // 剩余次数提示
+          if (err && err.remaining && err.remaining > 0 && err.remaining <= 2) {
+            displayMsg += "（还剩 " + err.remaining + " 次机会）";
+          }
+          msgSpan.textContent = displayMsg;
           hint.appendChild(msgSpan);
           // 未验证邮箱：提供重发按钮
           if (isNotConfirmed && isLogin) {

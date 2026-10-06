@@ -326,6 +326,25 @@ async function readStats() {
   });
 }
 
+/* ---------- 自动检查订阅更新（打开规则页时触发，5 分钟冷却） ---------- */
+let __lastAutoCheck = 0;
+const AUTO_CHECK_COOLDOWN = 5 * 60 * 1000;   // 5 分钟
+
+async function autoCheckSubscriptions() {
+  // 冷却期内不重复检查
+  if (Date.now() - __lastAutoCheck < AUTO_CHECK_COOLDOWN) return;
+  __lastAutoCheck = Date.now();
+  try {
+    const resp = await sendMessage("checkSubscriptionUpdates");
+    if (resp && resp.ok && resp.changed > 0) {
+      // 有更新 → 强制刷新列表显示横幅
+      await loadSubscriptions({ force: true });
+    }
+  } catch (e) {
+    // 静默失败
+  }
+}
+
 /* ---------- 侧栏切换 ---------- */
 $$(".nav-item").forEach(item => {
   item.addEventListener("click", () => {
@@ -333,6 +352,8 @@ $$(".nav-item").forEach(item => {
     $$(".nav-item").forEach(n => n.classList.toggle("active", n === item));
     $$(".panel").forEach(p => p.classList.toggle("active", p.dataset.panel === tab));
     location.hash = tab;
+    // 打开规则页 → 自动检查更新
+    if (tab === "rules") autoCheckSubscriptions();
   });
 });
 // 支持 #sites?host=xxx 定位
@@ -349,8 +370,11 @@ function parseHash() {
   return { tab, params };
 }
 const { tab: initialTab, params: initialParams } = parseHash();
-const initialItem = document.querySelector(`.nav-item[data-tab="${initialTab}"]`);
-if (initialItem) initialItem.click();
+// 注意：内联脚本已在 head 里设置了 active 状态（避免闪烁）
+// 这里只需触发规则页的自动检查（不重复切换 active）
+if (initialTab === "rules") {
+  autoCheckSubscriptions();
+}
 
 // 若带 host 参数，滚动到该站点并高亮
 if (initialTab === "sites" && initialParams.host) {
@@ -366,32 +390,26 @@ if (initialTab === "sites" && initialParams.host) {
 
 /* ---------- 规则集行 ---------- */
 function renderRulesets(s) {
-  const wrap = $("#rulesetSettings");
-  if (!wrap) return;   // 「隐私保护」页已移除此列表
-  wrap.innerHTML = "";
-  for (const r of RULESETS) {
-    const row = document.createElement("label");
-    row.className = "rule-item";
-    row.innerHTML = `
-      <span class="rule-dot" style="background:${r.color}"></span>
-      <div class="rule-body">
-        <div class="rule-title">${r.label}</div>
-        <div class="rule-sub">${r.desc}</div>
-      </div>
-      <label class="switch">
-        <input type="checkbox" ${s.rulesets[r.id] !== false ? "checked" : ""} ${!s.enabled ? "disabled" : ""} />
-        <span class="slider"></span>
-      </label>
-    `;
-    const input = row.querySelector("input");
+  // 更新 5 个分规则集开关
+  const all = document.querySelectorAll("input[data-ruleset]");
+  for (const input of all) {
+    const id = input.getAttribute("data-ruleset");
+    input.checked = s.rulesets[id] !== false;
+    input.disabled = !s.enabled;
+  }
+}
+
+// ===== 分规则集开关事件绑定（DOMContentLoaded 后执行一次） =====
+function initRulesetToggles() {
+  const all = document.querySelectorAll("input[data-ruleset]");
+  for (const input of all) {
     input.addEventListener("change", async (e) => {
-      e.stopPropagation();
+      const id = input.getAttribute("data-ruleset");
       const cur = await readSettings();
-      cur.rulesets[r.id] = input.checked;
+      cur.rulesets[id] = input.checked;
       await writeSettings(cur);
+      // 立即生效：background 会监听 storage 变化并 syncRulesets
     });
-    input.addEventListener("click", e => e.stopPropagation());
-    wrap.appendChild(row);
   }
 }
 
@@ -968,6 +986,97 @@ if (rangeSelect) {
 // （分类下拉已移除）
 
 
+/* ---------- 自定义规则 ---------- */
+async function loadUserRules() {
+  const store = await chrome.storage.local.get("adshield_user_rules");
+  const el = $("#rulesInput");
+  if (el) el.value = (store.adshield_user_rules || []).join("\n");
+}
+
+/* ---------- 元素隐藏规则渲染 ---------- */
+async function renderCosmeticRules() {
+  const store = await chrome.storage.local.get("adshield_user_cosmetic");
+  const rules = store.adshield_user_cosmetic || [];
+  const listEl = $("#cosmeticRulesList");
+  const emptyEl = $("#cosmeticRulesEmpty");
+  const countEl = $("#cosmeticCount");
+  if (!listEl || !emptyEl) return;
+
+  if (countEl) countEl.textContent = rules.length;
+  listEl.innerHTML = "";
+  if (!rules.length) {
+    emptyEl.style.display = "block";
+    listEl.style.display = "none";
+    return;
+  }
+  emptyEl.style.display = "none";
+  listEl.style.display = "flex";
+
+  rules.forEach((raw, idx) => {
+    if (typeof raw !== "string") return;
+    const li = document.createElement("li");
+    li.className = "cosmetic-item";
+
+    const idx2 = raw.indexOf("##");
+    const domainsPart = idx2 >= 0 ? raw.slice(0, idx2).trim() : "";
+    const selector = idx2 >= 0 ? raw.slice(idx2 + 2).trim() : raw;
+
+    const domainHtml = !domainsPart
+      ? '<span class="cosmetic-global">全局</span>'
+      : '<span class="cosmetic-domain">' + escapeHtml(domainsPart) + '</span>';
+
+    li.innerHTML =
+      '<div class="cosmetic-item-text">' +
+        domainHtml +
+        '<span class="cosmetic-selector">##' + escapeHtml(selector) + '</span>' +
+      '</div>' +
+      '<button class="cosmetic-remove" data-idx="' + idx + '">删除</button>';
+
+    li.querySelector(".cosmetic-remove").addEventListener("click", async () => {
+      const cur = await chrome.storage.local.get("adshield_user_cosmetic");
+      const arr = cur.adshield_user_cosmetic || [];
+      arr.splice(idx, 1);
+      await chrome.storage.local.set({ "adshield_user_cosmetic": arr });
+      const store2 = await chrome.storage.local.get("adshield_user_rules");
+      const userRules = (store2.adshield_user_rules || []).filter(r => r !== raw);
+      await chrome.storage.local.set({ "adshield_user_rules": userRules });
+      await chrome.runtime.sendMessage({ type: "saveUserRules", rules: userRules });
+      await renderCosmeticRules();
+      await loadUserRules();
+    });
+
+    listEl.appendChild(li);
+  });
+}
+
+/* ---------- 自定义规则保存 / 清空 ---------- */
+const saveBtn = $("#saveBtn");
+if (saveBtn) {
+  saveBtn.addEventListener("click", async () => {
+    const lines = ($("#rulesInput").value || "").split("\n").map(l => l.trim()).filter(Boolean);
+    await chrome.storage.local.set({ "adshield_user_rules": lines });
+    const resp = await chrome.runtime.sendMessage({ type: "saveUserRules", rules: lines });
+    const st = $("#status");
+    const r = (resp && resp.result) || {};
+    let msg = "已应用 " + (r.applied || 0) + " 条";
+    if (r.cosmetic) msg += "，元素隐藏 " + r.cosmetic + " 条";
+    if (r.skipped && r.skipped.length) msg += "，跳过 " + r.skipped.length + " 条";
+    if (st) {
+      st.textContent = msg + " ✓";
+      setTimeout(() => { st.textContent = ""; }, 3500);
+    }
+    await renderCosmeticRules();
+  });
+}
+
+const clearBtn2 = $("#clearBtn");
+if (clearBtn2) {
+  clearBtn2.addEventListener("click", () => {
+    const el = $("#rulesInput");
+    if (el) el.value = "";
+  });
+}
+
 /* ---------- 主渲染 ---------- */
 async function render() {
   const s = await readSettings();
@@ -1088,12 +1197,132 @@ function sendMessage(type, payload) {
   });
 }
 
-async function loadSubscriptions() {
+// ===== SW 保活（防止 MV3 冷启动延迟） =====
+// 页面打开时立即 ping 唤醒 SW，之后每 20 秒 ping 一次
+(function keepServiceWorkerAlive() {
+  const ping = () => {
+    try {
+      chrome.runtime.sendMessage({ type: "ping" }, () => {
+        // 忽略 lastError（SW 可能暂时无响应）
+        void chrome.runtime.lastError;
+      });
+    } catch (e) {}
+  };
+  ping();  // 立即
+  setInterval(ping, 20000);
+  // 页面可见性变化时也 ping（切回来时保活）
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") ping();
+  });
+})();
+
+// ===== 订阅并发管理（多个订阅可同时拉取，全部完成后统一刷新 UI） =====
+let __activeSubRequests = 0;
+
+// 带重试的消息发送（防 MV3 SW 消息丢失）
+async function sendMessageWithRetry(type, payload, maxRetries = 3) {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      const resp = await sendMessage(type, payload);
+      if (resp && (resp.ok !== undefined || resp.results !== undefined)) {
+        return resp;
+      }
+    } catch (e) {
+      // 继续重试
+    }
+    await new Promise(r => setTimeout(r, 150 * (i + 1)));
+  }
+  return { ok: false, error: "请求失败（已重试 " + maxRetries + " 次）" };
+}
+
+// 提交单个订阅（立即显示拉取中，后端串行处理）
+function queueSubscribe(url, name, btn) {
+  // 关键：点击瞬间立即同步更新 UI（在任何 await 之前）
+  __activeSubRequests++;
+  btn.disabled = true;
+  btn.textContent = "拉取中...";
+  // 强制回流（确保 UI 立即刷新，避免等待微任务）
+  void btn.offsetHeight;
+
+  return (async () => {
+  let result;
+  try {
+    const resp = await sendMessageWithRetry("saveSubscription", {
+      subscription: { url }
+    });
+    if (resp && resp.ok && resp.result) {
+      result = resp.result;
+    } else if (resp && resp.ok) {
+      result = { ok: true };
+    } else {
+      result = { ok: false, error: (resp && resp.error) || "未知错误" };
+    }
+  } catch (e) {
+    result = { ok: false, error: String(e) };
+  } finally {
+    __activeSubRequests--;
+    // 只有所有请求完成才刷新列表（避免中间态被覆盖）
+    if (__activeSubRequests === 0) {
+      setTimeout(() => loadSubscriptions(), 50);
+    }
+  }
+  return result;
+  })();
+}
+
+// 订阅数据缓存
+let __subsCache = null;
+let __subsCacheTs = 0;
+const SUBS_CACHE_TTL = 1500;   // 1.5 秒内复用缓存
+
+async function loadSubscriptions(opts) {
+  opts = opts || {};
+  const force = !!opts.force;
+
+  // 缓存命中：直接渲染（除非强制刷新）
+  if (!force && __subsCache && Date.now() - __subsCacheTs < SUBS_CACHE_TTL) {
+    renderSubsList(__subsCache.subs, __subsCache.interval, __subsCache.lastCheck);
+    return;
+  }
+
   const resp = await sendMessage("getSubscriptions");
   if (!resp.ok) return;
   const subs = resp.subscriptions || [];
   const interval = resp.interval || 24;
   const lastCheck = resp.lastCheck || 0;
+
+  // 更新缓存
+  __subsCache = { subs, interval, lastCheck };
+  __subsCacheTs = Date.now();
+
+  renderSubsList(subs, interval, lastCheck);
+}
+
+function renderSubsList(subs, interval, lastCheck) {
+  // 空状态切换
+  const emptyEl = $("#subEmptyState");
+  if (emptyEl) emptyEl.style.display = (subs.length === 0) ? "block" : "none";
+
+  // 有更新横幅
+  const banner = $("#subUpdateBanner");
+  if (banner) {
+    const updated = subs.filter(s => s.hasUpdate);
+    if (updated.length > 0) {
+      banner.style.display = "flex";
+      const titleEl = $("#subUpdateBannerTitle");
+      const descEl = $("#subUpdateBannerDesc");
+      if (titleEl) titleEl.textContent = updated.length + " 个订阅源有更新";
+      if (descEl) descEl.textContent = "点击「立即更新」应用最新规则";
+    } else {
+      banner.style.display = "none";
+    }
+  }
+
+  // 同步按钮状态（如果当前是 idle 且有更新，切到 ready）
+  if (__btnState === "idle") {
+    const cnt = subs.filter(s => s.hasUpdate).length;
+    if (cnt > 0) setBtnState("ready", cnt);
+  }
 
   // 更新间隔下拉
   const sel = $("#subIntervalSelect");
@@ -1136,10 +1365,14 @@ async function loadSubscriptions() {
       status = "<span class='sub-status'>未更新</span>";
     }
 
+    // 有更新徽章
+    const updateBadge = sub.hasUpdate ? "<span class='sub-badge sub-badge-new'>🆕 有更新</span>" : "";
+
     li.innerHTML =
       "<div class='item-main'>" +
         "<div class='item-title-row'>" +
           "<span class='sub-badge sub-badge-on'>已订阅</span>" +
+          updateBadge +
           "<span class='item-title' title='" + escapeHtml(sub.url || "") + "'>" + escapeHtml(displayName) + "</span>" +
         "</div>" +
         "<div class='item-meta'>" +
@@ -1151,6 +1384,9 @@ async function loadSubscriptions() {
         "<button class='item-action primary' data-update='" + sub.id + "'>更新</button>" +
         "<button class='item-action' data-remove='" + sub.id + "'>删除</button>" +
       "</div>";
+
+    // 有更新时：加边框高亮
+    if (sub.hasUpdate) li.classList.add("sub-item-has-update");
     // 更新按钮
     li.querySelector("[data-update]").addEventListener("click", async (e) => {
       const btn = e.currentTarget;
@@ -1159,7 +1395,11 @@ async function loadSubscriptions() {
       btn.disabled = true;
       try {
         await sendMessage("saveSubscription", { subscription: { id: sub.id, url: sub.url, enabled: sub.enabled } });
-        await loadSubscriptions();
+        // 清除该订阅的"有更新"标记
+        if (sub.hasUpdate) {
+          await sendMessage("clearSubscriptionUpdateFlag", { id: sub.id });
+        }
+        await loadSubscriptions({ force: true });
       } catch (err) {
         btn.textContent = origText;
         btn.disabled = false;
@@ -1174,7 +1414,7 @@ async function loadSubscriptions() {
       });
       if (!ok) return;
       await sendMessage("removeSubscription", { id: sub.id });
-      await loadSubscriptions();
+      await loadSubscriptions({ force: true });
     });
     ul.appendChild(li);
   }
@@ -1202,12 +1442,10 @@ async function loadSubscriptions() {
       const hint = $("#subHint");
       hint.textContent = "正在拉取并验证（可能需几秒）...";
       hint.className = "hint";
-      btn.disabled = true;
-      btn.textContent = "拉取中...";
 
-      const resp = await sendMessage("saveSubscription", { subscription: { url: preset.url } });
-      if (resp.ok && resp.result && resp.result.ok) {
-        const result = resp.result;
+      // 并发提交（立即显示拉取中，后端串行处理）
+      const result = await queueSubscribe(preset.url, preset.name, btn);
+      if (result && result.ok) {
         const parts = [];
         if (result.domains) parts.push("域名 " + result.domains);
         if (result.exceptions) parts.push("例外 " + result.exceptions);
@@ -1216,15 +1454,13 @@ async function loadSubscriptions() {
         hint.textContent = "✅ " + preset.name + " 已应用 " + (result.count || 0) + " 条 DNR 规则" + detail;
         hint.className = "hint ok";
         setTimeout(() => { hint.textContent = ""; }, 6000);
-        await loadSubscriptions();
       } else {
-        const err = (resp && resp.error) || (resp && resp.result && resp.result.error) || "未知错误";
+        const err = (result && result.error) || "未知错误";
         hint.textContent = "❌ " + preset.name + " 添加失败：" + err;
         hint.className = "hint err";
         setTimeout(() => { hint.textContent = ""; }, 6000);
         btn.disabled = false;
         btn.textContent = "+ 订阅";
-        await loadSubscriptions();
       }
     });
     ul.appendChild(li);
@@ -1259,14 +1495,14 @@ if (subAddBtn) {
       hint.className = "hint ok";
       $("#subUrlInput").value = "";
       setTimeout(() => { hint.textContent = ""; }, 5000);
-      await loadSubscriptions();
+      await loadSubscriptions({ force: true });
     } else {
       // 失败：不保存
       const err = (resp && resp.error) || (resp && resp.result && resp.result.error) || "未知错误";
       hint.textContent = "❌ 添加失败：" + err;
       hint.className = "hint err";
       setTimeout(() => { hint.textContent = ""; }, 6000);
-      await loadSubscriptions();
+      await loadSubscriptions({ force: true });
     }
   });
 }
@@ -1275,347 +1511,182 @@ if (subAddBtn) {
 const PRESET_SUBS = {
   "easylist-cn":    { url: "https://easylist-downloads.adblockplus.org/easylistchina.txt", name: "EasyList China", desc: "网站广告规则 · 约 18000 条" },
   "cjx-annoyance":  { url: "https://raw.githubusercontent.com/cjx82630/cjxlist/master/cjx-annoyance.txt", name: "CJX Annoyance", desc: "扰民元素过滤 · 约 1800 条" },
-  "adguard-cn":     { url: "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_224_Chinese/filter.txt", name: "AdGuard 中文", desc: "AdGuard 官方规则 · 约 21000 条" },
-  "easyprivacy":    { url: "https://easylist.to/easylist/easyprivacy.txt", name: "EasyPrivacy", desc: "全球追踪器规则 · 约 56000 条" }
+  "adguard-cn":     { url: "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_224_Chinese/filter.txt", name: "AdGuard CN", desc: "AdGuard 官方中文规则 · 约 21000 条" },
+  "easyprivacy":    { url: "https://easylist.to/easylist/easyprivacy.txt", name: "EasyPrivacy", desc: "全球追踪器规则 · 约 56000 条" },
+  "adrules-lite":   { url: "https://bitbucket.org/hacamer/adrules/raw/main/adblock_lite.txt", name: "AdRules 精简版", desc: "中国地区广告屏蔽 · 3w+ 条 · 移动优化" }
 };
 
-// 更新全部
-const subUpdateAllBtn = $("#subUpdateAllBtn");
-if (subUpdateAllBtn) {
-  subUpdateAllBtn.addEventListener("click", async () => {
-    const hint = $("#subHint");
-    hint.textContent = "正在更新全部订阅...";
-    hint.className = "hint";
-    const resp = await sendMessage("updateAllSubscriptions");
-    if (resp.ok) {
-      const r = resp.result || {};
-      hint.textContent = "✅ 更新完成：成功 " + (r.ok || 0) + " 个，失败 " + (r.fail || 0) + " 个，共应用 " + (r.rules || 0) + " 条 DNR 规则";
-      hint.className = "hint ok";
-      setTimeout(() => { hint.textContent = ""; }, 5000);
-    } else {
-      hint.textContent = "更新失败：" + (resp.error || "");
-      hint.className = "hint err";
-    }
-    await loadSubscriptions();
+/* ============ 有更新提示横幅 ============ */
+const bannerBtn = $("#subUpdateBannerBtn");
+if (bannerBtn) {
+  bannerBtn.addEventListener("click", async () => {
+    // 触发"立即更新全部"按钮
+    const ub = $("#subUpdateAllBtn");
+    if (ub) ub.click();
+  });
+}
+const bannerDismiss = $("#subUpdateBannerDismiss");
+if (bannerDismiss) {
+  bannerDismiss.addEventListener("click", async () => {
+    // 忽略：清除所有 hasUpdate 标记
+    await sendMessage("clearSubscriptionUpdateFlag");
+    await loadSubscriptions({ force: true });
   });
 }
 
-// 更新间隔
-const subIntervalSelect = $("#subIntervalSelect");
-if (subIntervalSelect) {
-  subIntervalSelect.addEventListener("change", async () => {
-    const hours = parseInt(subIntervalSelect.value, 10) || 0;
-    await sendMessage("setSubscriptionInterval", { hours });
-    await loadSubscriptions();
-  });
-}
+/* ============ 检查 / 更新按钮（3 态） ============ */
+const updateAllBtn = $("#subUpdateAllBtn");
+let __btnState = "idle";   // idle | checking | updating | uptodate | ready
+let __pendingUpdateCount = 0;
 
-// 输入框回车快捷添加
-const subUrlInput = $("#subUrlInput");
-if (subUrlInput) {
-  subUrlInput.addEventListener("keydown", (e) => {
-    if (e.key === "Enter") subAddBtn.click();
-  });
-}
+function setBtnState(state, extra) {
+  if (!updateAllBtn) return;
+  __btnState = state;
+  updateAllBtn.classList.remove("loading", "ready");
 
-/* ---------- 规则管理：保存 / 清空 ---------- */
-async function loadUserRules() {
-  const store = await chrome.storage.local.get("adshield_user_rules");
-  const el = $("#rulesInput");
-  if (el) el.value = (store.adshield_user_rules || []).join("\n");
-}
-
-const saveBtn = $("#saveBtn");
-if (saveBtn) {
-  saveBtn.addEventListener("click", async () => {
-    const lines = $("#rulesInput").value.split("\n").map(l => l.trim()).filter(Boolean);
-    await chrome.storage.local.set({ "adshield_user_rules": lines });
-    const resp = await chrome.runtime.sendMessage({ type: "saveUserRules", rules: lines });
-    const st = $("#status");
-    const r = (resp && resp.result) || {};
-    let msg = `已应用 ${r.applied || 0} 条`;
-    if (r.cosmetic) msg += `，元素隐藏 ${r.cosmetic} 条`;
-    if (r.skipped && r.skipped.length) msg += `，跳过 ${r.skipped.length} 条`;
-    st.textContent = msg + " ✓";
-    setTimeout(() => (st.textContent = ""), 3500);
-
-    // 被跳过的规则在 Console 里详细列出
-    if (r.skipped && r.skipped.length) {
-      console.group("[AdShield] 被跳过的用户规则");
-      r.skipped.forEach(s => console.warn(`${s.reason}: ${s.line}`));
-      console.groupEnd();
-      st.title = r.skipped.map(s => `${s.reason}: ${s.line}`).join("\n");
-    } else {
-      st.title = "";
-    }
-
-    // 刷新元素隐藏规则列表
-    await renderCosmeticRules();
-  });
-}
-const clearBtn = $("#clearBtn");
-if (clearBtn) {
-  clearBtn.addEventListener("click", () => {
-    $("#rulesInput").value = "";
-  });
-}
-
-/* ---------- 元素隐藏规则管理 ---------- */
-async function renderCosmeticRules() {
-  const store = await chrome.storage.local.get("adshield_user_cosmetic");
-  const rules = store.adshield_user_cosmetic || [];
-  const listEl = $("#cosmeticRulesList");
-  const emptyEl = $("#cosmeticRulesEmpty");
-  if (!listEl || !emptyEl) return;
-
-  const countEl = $("#cosmeticCount");
-  if (countEl) countEl.textContent = rules.length;
-
-  listEl.innerHTML = "";
-  if (!rules.length) {
-    emptyEl.style.display = "block";
-    listEl.style.display = "none";
-    return;
+  switch (state) {
+    case "idle":
+      updateAllBtn.textContent = "检查更新";
+      updateAllBtn.disabled = false;
+      break;
+    case "checking":
+      updateAllBtn.classList.add("loading");
+      updateAllBtn.textContent = "检查中...";
+      updateAllBtn.disabled = true;
+      break;
+    case "uptodate":
+      updateAllBtn.textContent = "✓ 已是最新";
+      updateAllBtn.disabled = true;
+      setTimeout(() => { if (__btnState === "uptodate") setBtnState("idle"); }, 2500);
+      break;
+    case "ready":
+      __pendingUpdateCount = extra || 0;
+      updateAllBtn.classList.add("ready");
+      updateAllBtn.textContent = "立即更新（" + __pendingUpdateCount + "）";
+      updateAllBtn.disabled = false;
+      break;
+    case "updating":
+      updateAllBtn.classList.add("loading");
+      updateAllBtn.textContent = "更新中...";
+      updateAllBtn.disabled = true;
+      break;
   }
-  emptyEl.style.display = "none";
-  listEl.style.display = "flex";
-
-  rules.forEach((raw, idx) => {
-    if (typeof raw !== "string") return;
-    const li = document.createElement("li");
-    li.className = "cosmetic-item";
-
-    const idx2 = raw.indexOf("##");
-    const domainsPart = idx2 >= 0 ? raw.slice(0, idx2).trim() : "";
-    const selector = idx2 >= 0 ? raw.slice(idx2 + 2).trim() : raw;
-
-    let domainHtml;
-    if (!domainsPart) {
-      domainHtml = '<span class="cosmetic-global">全局</span>';
-    } else {
-      domainHtml = '<span class="cosmetic-domain">' + escapeHtml(domainsPart) + '</span>';
-    }
-
-    li.innerHTML =
-      '<div class="cosmetic-item-text">' +
-        domainHtml +
-        '<span class="cosmetic-selector">##' + escapeHtml(selector) + '</span>' +
-      '</div>' +
-      '<button class="cosmetic-remove" data-idx="' + idx + '">删除</button>';
-
-    li.querySelector(".cosmetic-remove").addEventListener("click", async () => {
-      const cur = await chrome.storage.local.get("adshield_user_cosmetic");
-      const arr = cur.adshield_user_cosmetic || [];
-      arr.splice(idx, 1);
-      await chrome.storage.local.set({ "adshield_user_cosmetic": arr });
-      // 同步：从 user_rules 里删掉这一条
-      const store2 = await chrome.storage.local.get("adshield_user_rules");
-      const userRules = (store2.adshield_user_rules || []).filter(r => r !== raw);
-      await chrome.storage.local.set({ "adshield_user_rules": userRules });
-      // 重新触发应用
-      await chrome.runtime.sendMessage({ type: "saveUserRules", rules: userRules });
-      // 重新渲染
-      await renderCosmeticRules();
-      await loadUserRules();
-    });
-
-    listEl.appendChild(li);
-  });
 }
 
-function escapeHtml(s) {
-  return String(s)
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&#39;");
-}
-
-// 导出元素隐藏规则
-const exportCosmeticBtn = $("#exportCosmeticBtn");
-if (exportCosmeticBtn) {
-  exportCosmeticBtn.addEventListener("click", async () => {
-    const store = await chrome.storage.local.get("adshield_user_cosmetic");
-    const rules = store.adshield_user_cosmetic || [];
-    if (!rules.length) {
-      alert("暂无元素隐藏规则");
-      return;
-    }
-    const text = rules.join("\n");
-    const blob = new Blob([text], { type: "text/plain" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "adshield-cosmetic-" + Date.now() + ".txt";
-    a.click();
-    URL.revokeObjectURL(url);
-  });
-}
-
-/* ---------- 导入 / 导出 ---------- */
-const exportAllBtn = $("#exportAllBtn");
-if (exportAllBtn) {
-  exportAllBtn.addEventListener("click", async () => {
-    const store = await chrome.storage.local.get(null);
-    const payload = {
-      _type: "adshield-backup",
-      _version: 1,
-      _exportedAt: new Date().toISOString(),
-      settings: store.adshield_settings || null,
-      stats: store.adshield_stats || null,
-      userRules: store.adshield_user_rules || []
-    };
-    const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `adshield-backup-${Date.now()}.json`;
-    a.click();
-    URL.revokeObjectURL(url);
-    const st = $("#importStatus");
-    st.textContent = "已导出 ✓";
-    setTimeout(() => (st.textContent = ""), 2500);
-  });
-}
-
-const importAllBtn = $("#importAllBtn");
-const importFile = $("#importFile");
-if (importAllBtn && importFile) {
-  importAllBtn.addEventListener("click", () => importFile.click());
-  importFile.addEventListener("change", async (e) => {
-    const file = e.target.files[0];
-    if (!file) return;
-    try {
-      const text = await file.text();
-      const data = JSON.parse(text);
-      if (data._type !== "adshield-backup") {
-        throw new Error("不是 AdShield 备份文件");
-      }
-      const patch = {};
-      if (data.settings) patch.adshield_settings = data.settings;
-      if (data.stats)    patch.adshield_stats = data.stats;
-      if (data.userRules) patch.adshield_user_rules = data.userRules;
-      await chrome.storage.local.set(patch);
-      // 触发一次同步，把用户规则写入 DNR
-      if (data.userRules) {
-        await chrome.runtime.sendMessage({ type: "saveUserRules", rules: data.userRules });
-      }
-      await loadUserRules();
-      render();
-      const st = $("#importStatus");
-      st.textContent = "导入成功 ✓";
-      st.style.color = "var(--color-success-600)";
-      setTimeout(() => { st.textContent = ""; }, 3000);
-    } catch (err) {
-      const st = $("#importStatus");
-      st.textContent = "导入失败：" + err.message;
-      st.style.color = "var(--color-danger-500)";
-      setTimeout(() => { st.textContent = ""; }, 4000);
-    } finally {
-      importFile.value = "";
-    }
-  });
-}
-
-/* ---------- 导出报告 ---------- */
-$("#exportBtn").addEventListener("click", async () => {
-  const s = await readSettings();
-  const stats = await readStats();
-  const report = {
-    导出时间: new Date().toISOString(),
-    累计拦截: stats.total || 0,
-    页面数: Object.keys(stats.byPage || {}).length,
-    域名数: Object.keys(stats.byBlocked || {}).length,
-    Top域名: Object.entries(stats.byBlocked || {}).sort((a,b)=>b[1]-a[1]).slice(0, 50),
-    站点排行: Object.entries(stats.byPage || {}).sort((a,b)=>b[1]-a[1]).slice(0, 50),
-    设置: s
-  };
-  const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `adshield-report-${Date.now()}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
-});
-
-$("#resetStatsBtn").addEventListener("click", async () => {
-  const ok = await showConfirm("确定要重置所有统计数据吗？此操作不可恢复。", {
-    title: "重置统计",
-    confirmText: "重置",
-    type: "danger"
-  });
-  if (!ok) return;
-  await chrome.storage.local.set({ [STATS_KEY]: { total: 0, byPage: {}, byBlocked: {}, byCategory: {}, byDate: {} } });
-  render();
-});
-
-// 填充模拟数据（仅用于预览图表）
-$("#mockDataBtn").addEventListener("click", async () => {
-  const ok = await showConfirm("将用模拟数据覆盖趋势图数据（仅影响 byDate，不影响其它统计）。", {
-    title: "填充模拟数据",
-    confirmText: "继续",
-    type: "warning"
-  });
-  if (!ok) return;
-
-  const store = await chrome.storage.local.get("adshield_stats");
-  const stats = store.adshield_stats || {};
-  const byDate = {};
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const pad = (n) => String(n).padStart(2, "0");
-
-  for (let i = 13; i >= 0; i--) {
-    const d = new Date(today);
-    d.setDate(d.getDate() - i);
-    const key = d.getFullYear() + "-" + pad(d.getMonth() + 1) + "-" + pad(d.getDate());
-    byDate[key] = {
-      ads:        Math.floor(Math.random() * 60) + 10,
-      tracking:   Math.floor(Math.random() * 30) + 5,
-      annoyances: Math.floor(Math.random() * 12),
-      url_clean:  Math.floor(Math.random() * 8),
-      malware:    Math.floor(Math.random() * 3)
-    };
-  }
-
-  stats.byDate = byDate;
-  await chrome.storage.local.set({ adshield_stats: stats });
-  render();
-  await showAlert("已填充 14 天模拟数据", { title: "完成", type: "info" });
-});
-
-chrome.storage.onChanged.addListener((changes, area) => {
-  if (area === "local" && (changes[SETTINGS_KEY] || changes[STATS_KEY])) render();
-});
-
-// 只刷新数字（不重绘图表，避免闪烁）
-async function refreshReportNumbers() {
+async function doCheck() {
+  setBtnState("checking");
+  const hint = $("#subHint");
   try {
-    const stats = await readStats();
-    const elTotal = $("#repTotal");
-    const elPages = $("#repPages");
-    const elDomains = $("#repDomains");
-    if (elTotal) elTotal.textContent = stats.total || 0;
-    if (elPages) elPages.textContent = Object.keys(stats.byPage || {}).length;
-    if (elDomains) elDomains.textContent = Object.keys(stats.byBlocked || {}).length;
-  } catch (e) {}
+    const resp = await sendMessage("checkSubscriptionUpdates");
+    const changed = (resp && resp.changed) || 0;
+    if (changed > 0) {
+      if (hint) {
+        hint.textContent = "🔔 发现 " + changed + " 个订阅源有更新";
+        hint.className = "hint ok";
+        setTimeout(() => { hint.textContent = ""; }, 4000);
+      }
+      setBtnState("ready", changed);
+    } else {
+      setBtnState("uptodate");
+    }
+  } catch (e) {
+    if (hint) {
+      hint.textContent = "❌ 检查失败：" + (e.message || e);
+      hint.className = "hint err";
+      setTimeout(() => { hint.textContent = ""; }, 4000);
+    }
+    setBtnState("idle");
+  }
 }
 
-// 定时轮询：页面可见 + 当前面板是「拦截统计」时，每秒更新数字
-setInterval(async () => {
-  if (document.visibilityState !== "visible") return;
-  const cur = document.querySelector(".panel.active");
-  if (!cur) return;
-  const panel = cur.dataset.panel;
-  if (panel === "report") {
-    await refreshReportNumbers();
-    renderTrackers();   // Top 域名列表也刷新
-  } else if (panel === "trackers") {
-    renderTrackers();
+async function doUpdateAll() {
+  setBtnState("updating");
+  const hint = $("#subHint");
+  try {
+    const resp = await sendMessage("updateAllSubscriptions");
+    const result = (resp && resp.result) || {};
+    if (hint) {
+      if (result.fail > 0) {
+        hint.textContent = "✅ 成功 " + (result.ok || 0) + " · ❌ 失败 " + result.fail + " · 共 " + (result.rules || 0) + " 条规则";
+        hint.className = "hint err";
+      } else {
+        hint.textContent = "✅ 全部更新成功 · " + (result.rules || 0) + " 条规则";
+        hint.className = "hint ok";
+      }
+      setTimeout(() => { hint.textContent = ""; }, 5000);
+    }
+    // 更新完成 → 重置为「已是最新」
+    await loadSubscriptions({ force: true });
+    setBtnState("uptodate");
+  } catch (e) {
+    if (hint) {
+      hint.textContent = "❌ 更新失败：" + (e.message || e);
+      hint.className = "hint err";
+      setTimeout(() => { hint.textContent = ""; }, 5000);
+    }
+    setBtnState("idle");
   }
-}, 1500);
+}
 
+if (updateAllBtn) {
+  updateAllBtn.addEventListener("click", () => {
+    if (__btnState === "checking" || __btnState === "updating") return;
+    if (__btnState === "ready") {
+      doUpdateAll();
+    } else {
+      doCheck();
+    }
+  });
+  // 初始化
+  setBtnState("idle");
+}
+
+/* ============ 恢复默认订阅按钮 ============ */
+const restoreBtn = $("#restoreDefaultsBtn");
+if (restoreBtn) {
+  restoreBtn.addEventListener("click", async () => {
+    restoreBtn.disabled = true;
+    restoreBtn.textContent = "拉取中...";
+    try {
+      const resp = await sendMessage("restoreDefaultSubscriptions");
+      if (resp && resp.ok) {
+        if (resp.added > 0) {
+          await loadSubscriptions({ force: true });
+        } else {
+          restoreBtn.textContent = resp.message || "已存在";
+          setTimeout(() => {
+            restoreBtn.disabled = false;
+            restoreBtn.textContent = "恢复推荐订阅（4 个）";
+          }, 2000);
+        }
+      } else {
+        restoreBtn.textContent = "失败：" + ((resp && resp.error) || "未知错误");
+        setTimeout(() => {
+          restoreBtn.disabled = false;
+          restoreBtn.textContent = "恢复推荐订阅（4 个）";
+        }, 3000);
+      }
+    } catch (e) {
+      restoreBtn.textContent = "失败：" + e.message;
+      setTimeout(() => {
+        restoreBtn.disabled = false;
+        restoreBtn.textContent = "恢复推荐订阅（4 个）";
+      }, 3000);
+    }
+  });
+}
+
+/* ============ 初始化 ============ */
+// 绑定分规则集开关事件（只绑一次）
+initRulesetToggles();
+// 首次渲染
 render();
+
+// 侧栏 hash 变化监听
+window.addEventListener("hashchange", () => {
+  const { tab } = parseHash();
+  const item = document.querySelector(`.nav-item[data-tab="${tab}"]`);
+  if (item) item.click();
+  // 直接访问 #rules 也触发检查
+  if (tab === "rules") autoCheckSubscriptions();
+});

@@ -353,7 +353,12 @@ async function render() {
   // Menu 内的开关
   const swGE = $("#swGlobalEnabled");
   if (swGE) swGE.checked = s.enabled !== false;
+  const swNotify = $("#swNotifyOnBlock");
+  if (swNotify) swNotify.checked = !!s.notifyOnBlock;
   renderMenuLists(s);
+
+  // 同步白名单按钮文案
+  updateWhitelistLabel(s);
 }
 
 /* ---------- 事件 ---------- */
@@ -417,6 +422,25 @@ document.addEventListener("click", () => {
   $("#pauseMenu").classList.remove("open");
 });
 
+// 通知开关
+$("#swNotifyOnBlock").addEventListener("change", async (e) => {
+  const s = await readSettings();
+  s.notifyOnBlock = e.target.checked;
+  await writeSettings(s);
+  // 首次开启 → 请求通知权限（Chrome 会在首次 create 时自动弹权限）
+  if (e.target.checked) {
+    try {
+      chrome.notifications.create("adshield-test-" + Date.now(), {
+        type: "basic",
+        iconUrl: "icons/icon128.png",
+        title: "AdShield 通知已开启",
+        message: "后续拦截广告时会通知您",
+        silent: true
+      });
+    } catch (err) {}
+  }
+});
+
 // Menu 打开 / 关闭
 $("#menuBtn").addEventListener("click", () => $("#menuOverlay").classList.add("open"));
 $("#menuCloseBtn").addEventListener("click", () => $("#menuOverlay").classList.remove("open"));
@@ -472,6 +496,33 @@ $("#actClearData").addEventListener("click", async () => {
     await showAlert("清除失败：" + e.message, { title: "错误", type: "danger" });
   }
 });
+
+/* ---------- 工具项：加入/移出白名单 ---------- */
+$("#actWhitelist").addEventListener("click", async () => {
+  if (!currentHost) {
+    await showAlert("无活动页面", { title: "提示", type: "info" });
+    return;
+  }
+  const s = await readSettings();
+  const inList = s.disabledSites.includes(currentHost);
+  if (inList) {
+    s.disabledSites = s.disabledSites.filter(h => h !== currentHost);
+  } else {
+    s.disabledSites.push(currentHost);
+    delete s.pausedUntil[currentHost];   // 加入白名单时清掉临时暂停
+  }
+  await writeSettings(s);
+  render();
+  // 更新按钮文案
+  updateWhitelistLabel(s);
+});
+
+function updateWhitelistLabel(s) {
+  const label = $("#whitelistLabel");
+  if (!label) return;
+  const inList = currentHost && s.disabledSites && s.disabledSites.includes(currentHost);
+  label.textContent = inList ? "移出白名单" : "加入白名单";
+}
 
 /* ---------- 工具项：隐藏内容块（元素拾取器） ---------- */
 $("#actHideBlock").addEventListener("click", async () => {

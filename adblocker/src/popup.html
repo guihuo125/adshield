@@ -149,8 +149,38 @@
       <div class="menu-section-title">防护类型</div>
       <div class="menu-list" id="rulesetList"></div>
 
+      <div class="menu-section-title">通知</div>
+      <div class="menu-list">
+        <label class="menu-row">
+          <div class="menu-row-label">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0">
+              <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/>
+              <path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+            </svg>
+            <span>拦截时通知</span>
+          </div>
+          <div class="switch-toggle">
+            <input type="checkbox" id="swNotifyOnBlock" />
+            <span class="slider"></span>
+          </div>
+        </label>
+      </div>
+
       <div class="menu-section-title">工具</div>
       <div class="menu-list">
+        <button class="menu-action" id="actWhitelist">
+          <div class="ma-left">
+            <span class="ma-icon ma-icon-whitelist">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                <polyline points="9 12 11 14 15 10"/>
+              </svg>
+            </span>
+            <span id="whitelistLabel">加入白名单</span>
+          </div>
+          <svg class="ma-chevron" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 6 15 12 9 18"/></svg>
+        </button>
+
         <button class="menu-action" id="actHideBlock">
           <div class="ma-left">
             <span class="ma-icon ma-icon-hide">

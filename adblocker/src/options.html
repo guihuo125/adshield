@@ -7,6 +7,25 @@
   <script src="shared/theme.js"></script>
   <link rel="stylesheet" href="options.css" />
   <link rel="stylesheet" href="shared/modal.css" />
+  <script>
+    // 立即根据 hash 设置侧栏 + 面板（避免闪现）
+    (function () {
+      try {
+        var raw = (location.hash || "").replace("#", "") || "privacy";
+        var tab = raw.split("?")[0] || "privacy";
+        document.addEventListener("DOMContentLoaded", function () {
+          var navItems = document.querySelectorAll(".nav-item");
+          var panels = document.querySelectorAll(".panel");
+          for (var i = 0; i < navItems.length; i++) {
+            navItems[i].classList.toggle("active", navItems[i].getAttribute("data-tab") === tab);
+          }
+          for (var j = 0; j < panels.length; j++) {
+            panels[j].classList.toggle("active", panels[j].getAttribute("data-panel") === tab);
+          }
+        });
+      } catch (e) {}
+    })();
+  </script>
 </head>
 <body>
   <div class="layout">
@@ -18,7 +37,7 @@
       </div>
 
       <nav class="side-nav">
-        <a class="nav-item active" data-tab="privacy">
+        <a class="nav-item" data-tab="privacy">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
             <path d="M12 3l7 4v5c0 4.5-3 8-7 9-4-1-7-4.5-7-9V7z"/>
             <polyline points="9 12 11 14 15 10"/>
@@ -181,6 +200,69 @@
 
         </div>
 
+        <!-- 分规则集开关 -->
+        <div class="card">
+          <div class="card-title">分类开关</div>
+          <div class="card-sub">独立控制 5 类规则的启用状态。关闭后对应的拦截规则立即失效。</div>
+          <div class="ruleset-list">
+            <div class="ruleset-item">
+              <div class="ruleset-dot" style="background:#FD3638"></div>
+              <div class="ruleset-body">
+                <div class="ruleset-name">广告拦截</div>
+                <div class="ruleset-desc">横幅、弹窗、视频贴片、信息流</div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="swRsAds" data-ruleset="ads" />
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="ruleset-item">
+              <div class="ruleset-dot" style="background:#A78BFA"></div>
+              <div class="ruleset-body">
+                <div class="ruleset-name">追踪防护</div>
+                <div class="ruleset-desc">第三方跨站追踪器</div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="swRsTracking" data-ruleset="tracking" />
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="ruleset-item">
+              <div class="ruleset-dot" style="background:#F79009"></div>
+              <div class="ruleset-body">
+                <div class="ruleset-name">干扰过滤</div>
+                <div class="ruleset-desc">推送请求、弹窗挂件、反拦截脚本</div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="swRsAnnoyances" data-ruleset="annoyances" />
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="ruleset-item">
+              <div class="ruleset-dot" style="background:#00AEF0"></div>
+              <div class="ruleset-body">
+                <div class="ruleset-name">URL 清理</div>
+                <div class="ruleset-desc">自动去除 utm 等追踪参数</div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="swRsUrlClean" data-ruleset="url_clean" />
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="ruleset-item">
+              <div class="ruleset-dot" style="background:#7F1D1D"></div>
+              <div class="ruleset-body">
+                <div class="ruleset-name">恶意防护</div>
+                <div class="ruleset-desc">挖矿脚本、恶意分发域名</div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="swRsMalware" data-ruleset="malware" />
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+
         <div class="rule-item-static">
           <div class="rule-icon-static">
             <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
@@ -211,8 +293,25 @@
           <div class="card-title">规则订阅</div>
           <div class="card-sub">从在线来源自动更新规则（支持 JSON 和 uBlock / AdGuard 文本格式）。</div>
 
+          <!-- 有更新提示横幅 -->
+          <div id="subUpdateBanner" class="sub-update-banner" style="display:none">
+            <div class="sub-update-icon">🔔</div>
+            <div class="sub-update-text">
+              <strong id="subUpdateBannerTitle">发现规则更新</strong>
+              <span id="subUpdateBannerDesc">部分订阅源有新的规则版本</span>
+            </div>
+            <button id="subUpdateBannerBtn" class="btn-primary">全部更新</button>
+            <button id="subUpdateBannerDismiss" class="sub-update-dismiss" title="忽略">×</button>
+          </div>
+
           <!-- 统一订阅列表（已订阅 + 推荐） -->
           <ul id="subList"></ul>
+
+          <!-- 空状态：恢复默认订阅 -->
+          <div id="subEmptyState" class="sub-empty-state" style="display:none">
+            <div class="sub-empty-text">暂无订阅源</div>
+            <button id="restoreDefaultsBtn" class="btn-primary">恢复推荐订阅（4 个）</button>
+          </div>
 
           <!-- 添加自定义订阅 -->
           <div class="sub-add-block">
@@ -444,7 +543,7 @@
               </div>
               <div class="link-body">
                 <div class="link-title">Edge 商店</div>
-                <div class="link-desc">在商店页面评分或评价</div>
+                <div class="link-desc">查看商店页面 · 评分与反馈</div>
               </div>
               <svg class="link-arrow" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
@@ -818,43 +917,51 @@
           </div>
 
           <div class="card">
-            <div class="card-title">登录设备</div>
-            <div class="card-sub">显示当前账号已登录的设备。可移除未知设备。</div>
-            <ul id="deviceList" class="device-list"></ul>
-            <div class="hint" id="deviceHint"></div>
-          </div>
+            <div class="card-title">账号与安全</div>
+            <div class="card-sub">管理登录设备、密码与账号安全。</div>
 
-          <div class="card">
-            <div class="card-title">账号设置</div>
-            <div class="link-list">
-              <button class="link-item" id="btnChangePassword">
-                <div class="link-icon link-icon-password">
-                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="3" y="11" width="18" height="11" rx="2"/>
-                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                  </svg>
-                </div>
-                <div class="link-body">
-                  <div class="link-title">修改密码</div>
-                  <div class="link-desc">为账号设置新密码</div>
-                </div>
-                <svg class="link-arrow" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 6 15 12 9 18"/></svg>
-              </button>
+            <!-- 设备 -->
+            <div class="security-section">
+              <div class="security-section-title">登录设备</div>
+              <ul id="deviceList" class="device-list"></ul>
+              <div class="hint" id="deviceHint"></div>
+            </div>
 
-              <button class="link-item" id="btnDeleteAccount">
-                <div class="link-icon link-icon-danger">
-                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <polyline points="3 6 5 6 21 6"/>
-                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
-                    <path d="M10 11v6M14 11v6"/>
-                  </svg>
-                </div>
-                <div class="link-body">
-                  <div class="link-title" style="color:#e11d20">删除账号</div>
-                  <div class="link-desc">永久删除账号与云端数据</div>
-                </div>
-                <svg class="link-arrow" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 6 15 12 9 18"/></svg>
-              </button>
+            <div class="security-divider"></div>
+
+            <!-- 账号操作 -->
+            <div class="security-section">
+              <div class="security-section-title">账号操作</div>
+              <div class="link-list">
+                <button class="link-item" id="btnChangePassword">
+                  <div class="link-icon link-icon-password">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <rect x="3" y="11" width="18" height="11" rx="2"/>
+                      <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                    </svg>
+                  </div>
+                  <div class="link-body">
+                    <div class="link-title">修改密码</div>
+                    <div class="link-desc">为账号设置新密码</div>
+                  </div>
+                  <svg class="link-arrow" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 6 15 12 9 18"/></svg>
+                </button>
+
+                <button class="link-item" id="btnDeleteAccount">
+                  <div class="link-icon link-icon-danger">
+                    <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                      <polyline points="3 6 5 6 21 6"/>
+                      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                      <path d="M10 11v6M14 11v6"/>
+                    </svg>
+                  </div>
+                  <div class="link-body">
+                    <div class="link-title" style="color:#e11d20">删除账号</div>
+                    <div class="link-desc">永久删除账号与云端数据</div>
+                  </div>
+                  <svg class="link-arrow" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 6 15 12 9 18"/></svg>
+                </button>
+              </div>
             </div>
           </div>
         </div>

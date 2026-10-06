@@ -16,6 +16,7 @@ const DEFAULT_SETTINGS = {
   assist: true,
   showBadge: true,
   theme: "auto",
+  notifyOnBlock: false,  // 拦截时是否发系统通知（默认关）
   assistedSites: [],   // 浏览助手触发历史：[{ host, ts, until, reason }]
   // 订阅更新
   subscriptions: [],           // [{ id, name, url, enabled, lastUpdate, lastCount, lastError }]
@@ -372,6 +373,35 @@ async function applyUserRules(rules) {
 /* ============ 规则订阅：在线更新 ============ */
 const SUB_RULE_BASE = 300000;   // 订阅规则 ID 段（300000~399999）
 
+/* ============ 默认订阅源（首次安装自动订阅） ============ */
+const DEFAULT_SUBSCRIPTIONS = [
+  { url: "https://easylist-downloads.adblockplus.org/easylistchina.txt", name: "EasyList China" },
+  { url: "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_224_Chinese/filter.txt", name: "AdGuard CN" },
+  { url: "https://raw.githubusercontent.com/cjx82630/cjxlist/master/cjx-annoyance.txt", name: "CJX Annoyance" },
+  { url: "https://easylist.to/easylist/easyprivacy.txt", name: "EasyPrivacy" }
+];
+
+/* ============ 简单字符串哈希（用于检测规则变化） ============ */
+function simpleHash(str) {
+  let h = 0;
+  const s = String(str || "");
+  for (let i = 0; i < s.length; i++) {
+    h = ((h << 5) - h + s.charCodeAt(i)) | 0;
+  }
+  return h.toString(36);
+}
+
+/* ============ 订阅操作串行队列（防并发竞态） ============ */
+let __subscriptionQueue = Promise.resolve();
+function enqueueSubscription(fn) {
+  const next = __subscriptionQueue.then(
+    () => fn(),
+    () => fn()   // 前一个失败也继续
+  );
+  __subscriptionQueue = next.catch(() => {});
+  return next;
+}
+
 // 解析订阅内容（支持 JSON 数组 或 uBlock 文本格式）
 function parseSubscriptionText(text) {
   const lines = [];
@@ -450,25 +480,28 @@ function scorePathRule(path) {
   return Math.max(0, Math.min(100, score));
 }
 
-// 应用订阅规则到动态规则（批量合并域名，避免爆 DNR 上限）
-async function applySubscription(sub) {
-  if (!sub.url) return { ok: false, error: "无 URL" };
-
-  // 拉取（30 秒超时）
-  let text;
+// ===== 只拉取订阅文本（可并发） =====
+async function fetchSubscriptionText(url) {
+  if (!url) return { ok: false, error: "无 URL" };
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 30000);
   try {
-    const resp = await fetch(sub.url, { cache: "no-store", signal: controller.signal });
+    const resp = await fetch(url, { cache: "no-store", signal: controller.signal });
     if (!resp.ok) throw new Error("HTTP " + resp.status);
-    text = await resp.text();
+    const text = await resp.text();
     if (!text || text.length < 5) throw new Error("内容为空");
+    return { ok: true, text };
   } catch (e) {
     const msg = (e && e.name === "AbortError") ? "请求超时（30 秒）" : String(e);
     return { ok: false, error: msg };
   } finally {
     clearTimeout(timeout);
   }
+}
+
+// ===== 应用订阅规则到动态规则（接收已拉取的 text） =====
+async function applySubscriptionText(sub, text) {
+  if (!text) return { ok: false, error: "内容为空" };
 
   // 解析
   const lines = parseSubscriptionText(text);
@@ -687,17 +720,47 @@ async function applySubscription(sub) {
   }
 }
 
-// 更新所有启用的订阅
+// ===== 兼容包装：拉取 + 应用（顺序执行，用于更新单个订阅） =====
+async function applySubscription(sub) {
+  const fetched = await fetchSubscriptionText(sub.url);
+  if (!fetched.ok) return fetched;
+  return await applySubscriptionText(sub, fetched.text);
+}
+
+// 更新所有启用的订阅（并发拉取 + 串行提交）
 async function updateAllSubscriptions() {
   const s = await getSettings();
   const subs = s.subscriptions || [];
-  let totalOk = 0, totalFail = 0, totalRules = 0;
+  const enabledSubs = subs.filter(x => x.enabled !== false);
 
-  for (const sub of subs) {
-    if (sub.enabled === false) continue;
-    const result = await applySubscription(sub);
+  // 阶段 1：所有订阅并发拉取
+  const fetchedList = await Promise.all(
+    enabledSubs.map(sub => fetchSubscriptionText(sub.url).then(r => ({ sub, fetched: r })))
+  );
+
+  // 阶段 2：串行提交（防 dynamicRules 冲突）
+  let totalOk = 0, totalFail = 0, totalRules = 0, totalChanged = 0;
+  for (const { sub, fetched } of fetchedList) {
+    let result;
+    let newHash = "";
+    if (fetched.ok) {
+      newHash = simpleHash(fetched.text);
+      result = await applySubscriptionText(sub, fetched.text);
+    } else {
+      result = { ok: false, error: fetched.error };
+    }
     sub.lastUpdate = Date.now();
     if (result.ok) {
+      // 检测内容是否变化
+      const oldHash = sub.lastHash;
+      if (oldHash && oldHash !== newHash) {
+        sub.hasUpdate = true;
+        totalChanged++;
+      } else if (!oldHash) {
+        // 首次（无历史 hash），不标记为"更新"
+        sub.hasUpdate = false;
+      }
+      sub.lastHash = newHash;
       sub.lastCount = result.count;
       sub.lastDomains = result.domains || 0;
       sub.lastExceptions = result.exceptions || 0;
@@ -713,13 +776,21 @@ async function updateAllSubscriptions() {
 
   s.subscriptions = subs;
   s.lastSubscriptionCheck = Date.now();
+  if (totalChanged > 0) {
+    s.lastSubscriptionChangeTs = Date.now();
+  }
   await chrome.storage.local.set({ [SETTINGS_KEY]: s });
-  console.log("[AdShield] 订阅更新完成：成功", totalOk, "失败", totalFail, "共", totalRules, "条规则");
-  return { ok: totalOk, fail: totalFail, rules: totalRules };
+  console.log("[AdShield] 订阅更新完成：成功", totalOk, "失败", totalFail, "共", totalRules, "条规则，", totalChanged, "个有变化");
+  return { ok: totalOk, fail: totalFail, rules: totalRules, changed: totalChanged };
 }
 
 /* ============ 消息处理 ============ */
 function handleOtherMessage(msg, sender, sendResponse) {
+  // 最快路径：ping 立即响应（保活 SW，避免冷启动）
+  if (msg && msg.type === "ping") {
+    sendResponse({ ok: true, ts: Date.now() });
+    return;
+  }
   (async () => {
     try {
       const s = await getSettings();
@@ -793,91 +864,273 @@ function handleOtherMessage(msg, sender, sendResponse) {
       } else if (msg && msg.type === "getSubscriptions") {
         sendResponse({ ok: true, subscriptions: s.subscriptions || [], interval: s.subscriptionInterval || 24, lastCheck: s.lastSubscriptionCheck || 0 });
       } else if (msg && msg.type === "saveSubscription") {
-        const subs = s.subscriptions || [];
         const incoming = msg.subscription || {};
 
-        // ===== 新增订阅：先验证，失败则不保存 =====
-        if (!incoming.id) {
-          if (!incoming.url) {
-            sendResponse({ ok: false, error: "缺少 URL" });
-            return;
-          }
-          // 找空闲 ID
-          const used = new Set(subs.map(x => x.id % 100));
-          let newId = -1;
-          for (let i = 1; i < 100; i++) {
-            if (!used.has(i)) { newId = i; break; }
-          }
-          if (newId < 0) {
-            sendResponse({ ok: false, error: "订阅数量已达上限（99 个）" });
-            return;
-          }
-          const target = incoming;
-          target.id = newId;
-          target.enabled = target.enabled !== false;
-          target.lastUpdate = 0;
-          target.lastCount = 0;
-
-          // 先拉取验证（不写入 storage）
-          const result = await applySubscription(target);
-          if (!result.ok) {
-            // 拉取失败 → 回滚动态规则（applySubscription 内部可能已修改）
-            try {
-              const base = SUB_RULE_BASE + ((newId || 0) % 100) * 10000;
-              const existing = await chrome.declarativeNetRequest.getDynamicRules();
-              const removeRuleIds = existing
-                .filter(r => r.id >= base && r.id < base + 10000)
-                .map(r => r.id);
-              if (removeRuleIds.length) {
-                await chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds, addRules: [] });
-              }
-            } catch (e) {}
-            // 不保存，直接返回失败
-            sendResponse({ ok: false, error: result.error || "规则拉取失败", result });
-            return;
-          }
-
-          // 拉取成功 → 保存
-          target.lastUpdate = Date.now();
-          target.lastCount = result.count;
-          target.lastDomains = result.domains || 0;
-          target.lastExceptions = result.exceptions || 0;
-          target.lastPaths = result.paths || 0;
-          subs.push(target);
-          s.subscriptions = subs;
-          await chrome.storage.local.set({ [SETTINGS_KEY]: s });
-          sendResponse({ ok: true, subscriptions: subs, result });
-          return;
+        // ===== 阶段 1：先 fetch（不排队，多个订阅可并发拉取） =====
+        let fetched = null;
+        if (incoming.url) {
+          fetched = await fetchSubscriptionText(incoming.url);
         }
 
-        // ===== 更新已有订阅：允许失败（保留错误信息） =====
-        const idx = subs.findIndex(x => x.id === incoming.id);
-        if (idx < 0) {
-          sendResponse({ ok: false, error: "未找到订阅" });
-          return;
-        }
-        const target = Object.assign(subs[idx], incoming);
+        // ===== 阶段 2：串行 commit（防止 dynamicRules 冲突） =====
+        await enqueueSubscription(async () => {
+          const s = await getSettings();
+          const subs = s.subscriptions || [];
 
-        if (target.enabled !== false && target.url) {
-          const result = await applySubscription(target);
-          target.lastUpdate = Date.now();
-          if (result.ok) {
+          // ===== 新增订阅 =====
+          if (!incoming.id) {
+            if (!incoming.url) {
+              sendResponse({ ok: false, error: "缺少 URL" });
+              return;
+            }
+            if (!fetched || !fetched.ok) {
+              sendResponse({ ok: false, error: (fetched && fetched.error) || "拉取失败" });
+              return;
+            }
+            const used = new Set(subs.map(x => x.id % 100));
+            let newId = -1;
+            for (let i = 1; i < 100; i++) {
+              if (!used.has(i)) { newId = i; break; }
+            }
+            if (newId < 0) {
+              sendResponse({ ok: false, error: "订阅数量已达上限（99 个）" });
+              return;
+            }
+            const target = incoming;
+            target.id = newId;
+            target.enabled = target.enabled !== false;
+            target.lastUpdate = 0;
+            target.lastCount = 0;
+
+            const result = await applySubscriptionText(target, fetched.text);
+            if (!result.ok) {
+              try {
+                const base = SUB_RULE_BASE + ((newId || 0) % 100) * 10000;
+                const existing = await chrome.declarativeNetRequest.getDynamicRules();
+                const removeRuleIds = existing
+                  .filter(r => r.id >= base && r.id < base + 10000)
+                  .map(r => r.id);
+                if (removeRuleIds.length) {
+                  await chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds, addRules: [] });
+                }
+              } catch (e) {}
+              sendResponse({ ok: false, error: result.error || "规则应用失败", result });
+              return;
+            }
+
+            target.lastUpdate = Date.now();
             target.lastCount = result.count;
             target.lastDomains = result.domains || 0;
             target.lastExceptions = result.exceptions || 0;
             target.lastPaths = result.paths || 0;
-            delete target.lastError;
-          } else {
-            target.lastError = result.error;
+            target.lastHash = simpleHash(fetched.text);
+            target.hasUpdate = false;
+            subs.push(target);
+            s.subscriptions = subs;
+            await chrome.storage.local.set({ [SETTINGS_KEY]: s });
+            sendResponse({ ok: true, subscriptions: subs, result });
+            return;
           }
-          s.subscriptions = subs;
-          await chrome.storage.local.set({ [SETTINGS_KEY]: s });
-          sendResponse({ ok: true, subscriptions: subs, result });
-        } else {
-          s.subscriptions = subs;
-          await chrome.storage.local.set({ [SETTINGS_KEY]: s });
-          sendResponse({ ok: true, subscriptions: subs });
+
+          // ===== 更新已有订阅 =====
+          const idx = subs.findIndex(x => x.id === incoming.id);
+          if (idx < 0) {
+            sendResponse({ ok: false, error: "未找到订阅" });
+            return;
+          }
+          const target = Object.assign(subs[idx], incoming);
+
+          if (target.enabled !== false && target.url) {
+            let result;
+            if (fetched && fetched.ok) {
+              result = await applySubscriptionText(target, fetched.text);
+            } else {
+              result = { ok: false, error: (fetched && fetched.error) || "拉取失败" };
+            }
+            target.lastUpdate = Date.now();
+            if (result.ok) {
+              target.lastCount = result.count;
+              target.lastDomains = result.domains || 0;
+              target.lastExceptions = result.exceptions || 0;
+              target.lastPaths = result.paths || 0;
+              delete target.lastError;
+            } else {
+              target.lastError = result.error;
+            }
+            s.subscriptions = subs;
+            await chrome.storage.local.set({ [SETTINGS_KEY]: s });
+            sendResponse({ ok: true, subscriptions: subs, result });
+          } else {
+            s.subscriptions = subs;
+            await chrome.storage.local.set({ [SETTINGS_KEY]: s });
+            sendResponse({ ok: true, subscriptions: subs });
+          }
+        });
+      } else if (msg && msg.type === "saveSubscriptionsBatch") {
+        const incoming = msg.subscriptions || [];
+        if (!incoming.length) {
+          sendResponse({ ok: true, results: [] });
+          return;
         }
+
+        // ===== 阶段 1：并发 fetch（不排队，多订阅同时拉取） =====
+        const fetchedList = await Promise.all(
+          incoming.map(sub =>
+            fetchSubscriptionText(sub.url).then(r => ({ sub, fetched: r }))
+          )
+        );
+
+        // ===== 阶段 2：串行 commit（防 dynamicRules 冲突） =====
+        await enqueueSubscription(async () => {
+          const s = await getSettings();
+          const subs = s.subscriptions || [];
+          const results = [];
+
+          for (const { sub, fetched } of fetchedList) {
+            // 检查是否已订阅同 URL
+            const existIdx = subs.findIndex(x => x.url === sub.url);
+            if (existIdx >= 0) {
+              results.push({ ok: false, error: "已订阅该源" });
+              continue;
+            }
+
+            if (!fetched.ok) {
+              results.push({ ok: false, error: fetched.error });
+              continue;
+            }
+
+            // 分配 ID
+            const used = new Set(subs.map(x => x.id % 100));
+            let newId = -1;
+            for (let i = 1; i < 100; i++) {
+              if (!used.has(i)) { newId = i; break; }
+            }
+            if (newId < 0) {
+              results.push({ ok: false, error: "订阅数量已达上限（99 个）" });
+              continue;
+            }
+
+            const target = { url: sub.url, id: newId, enabled: true, lastUpdate: 0, lastCount: 0 };
+            const result = await applySubscriptionText(target, fetched.text);
+            if (!result.ok) {
+              // 回滚（虽然 apply 内部失败不会写入）
+              results.push({ ok: false, error: result.error || "应用失败" });
+              continue;
+            }
+
+            target.lastUpdate = Date.now();
+            target.lastCount = result.count;
+            target.lastDomains = result.domains || 0;
+            target.lastExceptions = result.exceptions || 0;
+            target.lastPaths = result.paths || 0;
+            target.lastHash = simpleHash(fetched.text);
+            target.hasUpdate = false;
+            subs.push(target);
+            // 更新 settings（每次都要写，防止 ID 重复）
+            s.subscriptions = subs;
+            await chrome.storage.local.set({ [SETTINGS_KEY]: s });
+            results.push({ ok: true, result });
+          }
+
+          sendResponse({ ok: true, results });
+        });
+      } else if (msg && msg.type === "restoreDefaultSubscriptions") {
+        // 恢复默认订阅（不重复已有的）
+        await enqueueSubscription(async () => {
+          const s = await getSettings();
+          const subs = s.subscriptions || [];
+          const existingUrls = new Set(subs.map(x => x.url));
+          const toAdd = DEFAULT_SUBSCRIPTIONS.filter(d => !existingUrls.has(d.url));
+
+          if (!toAdd.length) {
+            sendResponse({ ok: true, added: 0, message: "所有推荐订阅已存在" });
+            return;
+          }
+
+          // 分配 ID
+          const used = new Set(subs.map(x => x.id % 100));
+          let nextId = 1;
+          const assigned = [];
+          for (const d of toAdd) {
+            while (used.has(nextId) && nextId < 100) nextId++;
+            if (nextId >= 100) break;
+            used.add(nextId);
+            assigned.push({ id: nextId, url: d.url, name: d.name });
+            nextId++;
+          }
+
+          // 并发拉取
+          const fetched = await Promise.all(
+            assigned.map(a => fetchSubscriptionText(a.url).then(r => ({ a, r })))
+          );
+
+          // 串行提交
+          let added = 0;
+          for (const { a, r } of fetched) {
+            if (!r.ok) continue;
+            const target = { id: a.id, url: a.url, enabled: true, lastUpdate: 0, lastCount: 0 };
+            const result = await applySubscriptionText(target, r.text);
+            if (!result.ok) continue;
+            target.lastUpdate = Date.now();
+            target.lastCount = result.count;
+            target.lastDomains = result.domains || 0;
+            target.lastExceptions = result.exceptions || 0;
+            target.lastPaths = result.paths || 0;
+            subs.push(target);
+            s.subscriptions = subs;
+            await chrome.storage.local.set({ [SETTINGS_KEY]: s });
+            added++;
+          }
+          sendResponse({ ok: true, added });
+        });
+      } else if (msg && msg.type === "checkSubscriptionUpdates") {
+        // 轻量检查：只拉取 + 对比 hash，不应用规则
+        const s = await getSettings();
+        const subs = s.subscriptions || [];
+        const enabledSubs = subs.filter(x => x.enabled !== false);
+        if (!enabledSubs.length) {
+          sendResponse({ ok: true, checked: 0, changed: 0 });
+          return;
+        }
+        // 并发拉取
+        const fetchedList = await Promise.all(
+          enabledSubs.map(sub => fetchSubscriptionText(sub.url).then(r => ({ sub, fetched: r })))
+        );
+        let changed = 0;
+        for (const { sub, fetched } of fetchedList) {
+          if (!fetched.ok) continue;
+          const newHash = simpleHash(fetched.text);
+          if (sub.lastHash && sub.lastHash !== newHash) {
+            sub.hasUpdate = true;
+            changed++;
+          } else if (!sub.lastHash) {
+            // 无历史 hash，仅记录不提示
+            sub.lastHash = newHash;
+          }
+        }
+        if (changed > 0) {
+          s.subscriptions = subs;
+          await chrome.storage.local.set({ [SETTINGS_KEY]: s });
+        }
+        console.log("[AdShield] 检查订阅更新：", changed, "/", enabledSubs.length, "个有变化");
+        sendResponse({ ok: true, checked: enabledSubs.length, changed });
+      } else if (msg && msg.type === "clearSubscriptionUpdateFlag") {
+        const s = await getSettings();
+        const subs = s.subscriptions || [];
+        if (msg.id) {
+          // 只清指定订阅
+          for (const sub of subs) {
+            if (sub.id === msg.id) { sub.hasUpdate = false; break; }
+          }
+        } else {
+          // 清所有
+          for (const sub of subs) {
+            if (sub.hasUpdate) sub.hasUpdate = false;
+          }
+        }
+        s.subscriptions = subs;
+        await chrome.storage.local.set({ [SETTINGS_KEY]: s });
+        sendResponse({ ok: true });
       } else if (msg && msg.type === "removeSubscription") {
         const subs = (s.subscriptions || []).filter(x => x.id !== msg.id);
         s.subscriptions = subs;
@@ -1053,20 +1306,45 @@ chrome.alarms.onAlarm.addListener(async (a) => {
 });
 
 /* ============ 生命周期 ============ */
-chrome.runtime.onInstalled.addListener(async () => {
+chrome.runtime.onInstalled.addListener(async (details) => {
   const s = await getSettings();
+
+  // ===== 首次安装：填入默认订阅源 =====
+  let needFetchDefaults = false;
+  if (details && details.reason === "install") {
+    if (!s.subscriptions || s.subscriptions.length === 0) {
+      s.subscriptions = DEFAULT_SUBSCRIPTIONS.map((d, i) => ({
+        id: i + 1,                 // ID 段：1~4
+        url: d.url,
+        enabled: true,
+        lastUpdate: 0,
+        lastCount: 0
+      }));
+      needFetchDefaults = true;
+      console.log("[AdShield] 首次安装：已写入默认订阅", DEFAULT_SUBSCRIPTIONS.length, "个");
+    }
+  }
+
   await chrome.storage.local.set({ [SETTINGS_KEY]: s });
   await syncRulesets();
   await syncSiteAllowlist();
   createMenus();
   const tabs = await chrome.tabs.query({});
   for (const t of tabs) updateBadgeForTab(t.id);
-  // 初始化订阅定时器
   await scheduleSubscriptionCheck();
-  // 清理孤儿订阅规则
   await cleanupOrphanSubscriptions();
-  // 首次安装立即拉取一次订阅
-  updateAllSubscriptions().catch(() => {});
+
+  // ===== 首次安装：延迟 2 秒后自动拉取订阅（避免阻塞浏览器启动） =====
+  if (needFetchDefaults) {
+    setTimeout(() => {
+      updateAllSubscriptions().catch((e) => {
+        console.warn("[AdShield] 首次订阅拉取失败：", e);
+      });
+    }, 2000);
+  } else {
+    // 非首次：立即更新（若已有订阅）
+    updateAllSubscriptions().catch(() => {});
+  }
 });
 
 chrome.runtime.onStartup.addListener(syncRulesets);
@@ -1167,6 +1445,43 @@ function scheduleFlush() {
   }).catch(() => {});
 }
 
+/* ============ 拦截通知（节流：每 tab 每 60 秒最多 1 次） ============ */
+const __notifyState = new Map();   // tabId -> { lastNotify: ts, count: number }
+const NOTIFY_THROTTLE = 60 * 1000;   // 60 秒
+const NOTIFY_MIN_COUNT = 5;          // 至少拦截 5 条才通知
+
+async function maybeNotifyBlocked(tabId, pageHost, count) {
+  if (!tabId || tabId < 0) return;
+  const s = await getSettings();
+  if (!s.notifyOnBlock) return;
+
+  let st = __notifyState.get(tabId);
+  if (!st) {
+    st = { lastNotify: 0, count: 0 };
+    __notifyState.set(tabId, st);
+  }
+  st.count++;
+  const now = Date.now();
+  if (st.count < NOTIFY_MIN_COUNT) return;
+  if (now - st.lastNotify < NOTIFY_THROTTLE) return;
+  st.lastNotify = now;
+  const shown = st.count;
+  st.count = 0;
+
+  try {
+    chrome.notifications.create("adshield-block-" + tabId + "-" + now, {
+      type: "basic",
+      iconUrl: "icons/icon128.png",
+      title: "AdShield 已拦截",
+      message: "在 " + (pageHost || "当前页面") + " 拦截了 " + shown + " 个请求",
+      priority: 0,
+      silent: true
+    });
+  } catch (e) {
+    console.warn("[AdShield] 通知失败：", e);
+  }
+}
+
 if (chrome.declarativeNetRequest.onRuleMatchedDebug) {
   console.log("[AdShield] onRuleMatchedDebug 已注册");
   chrome.declarativeNetRequest.onRuleMatchedDebug.addListener(async (info) => {
@@ -1239,11 +1554,20 @@ if (chrome.declarativeNetRequest.onRuleMatchedDebug) {
     scheduleFlush();
 
     const tid = info.request && info.request.tabId;
-    if (tid != null && tid >= 0) updateBadgeForTab(tid);
+    if (tid != null && tid >= 0) {
+      updateBadgeForTab(tid);
+      // 触发通知（若开启）
+      maybeNotifyBlocked(tid, pageHost, 1).catch(() => {});
+    }
   });
 } else {
   console.warn("[AdShield] onRuleMatchedDebug 不可用（需开发者模式加载）");
 }
+
+// 标签关闭时清理通知状态
+chrome.tabs.onRemoved.addListener((tabId) => {
+  __notifyState.delete(tabId);
+});
 
 /* ============ 启动时应用一次用户规则 ============ */
 (async () => {
