@@ -1,0 +1,640 @@
+[
+  {
+    "id": 3000,
+    "priority": 1,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "transform": {
+          "queryTransform": {
+            "removeParams": [
+              "utm_source"
+            ]
+          }
+        }
+      }
+    },
+    "condition": {
+      "resourceTypes": [
+        "main_frame"
+      ],
+      "regexFilter": "[?&]utm_source="
+    }
+  },
+  {
+    "id": 3001,
+    "priority": 1,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "transform": {
+          "queryTransform": {
+            "removeParams": [
+              "utm_medium"
+            ]
+          }
+        }
+      }
+    },
+    "condition": {
+      "resourceTypes": [
+        "main_frame"
+      ],
+      "regexFilter": "[?&]utm_medium="
+    }
+  },
+  {
+    "id": 3002,
+    "priority": 1,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "transform": {
+          "queryTransform": {
+            "removeParams": [
+              "utm_campaign"
+            ]
+          }
+        }
+      }
+    },
+    "condition": {
+      "resourceTypes": [
+        "main_frame"
+      ],
+      "regexFilter": "[?&]utm_campaign="
+    }
+  },
+  {
+    "id": 3003,
+    "priority": 1,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "transform": {
+          "queryTransform": {
+            "removeParams": [
+              "utm_term"
+            ]
+          }
+        }
+      }
+    },
+    "condition": {
+      "resourceTypes": [
+        "main_frame"
+      ],
+      "regexFilter": "[?&]utm_term="
+    }
+  },
+  {
+    "id": 3004,
+    "priority": 1,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "transform": {
+          "queryTransform": {
+            "removeParams": [
+              "utm_content"
+            ]
+          }
+        }
+      }
+    },
+    "condition": {
+      "resourceTypes": [
+        "main_frame"
+      ],
+      "regexFilter": "[?&]utm_content="
+    }
+  },
+  {
+    "id": 3005,
+    "priority": 1,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "transform": {
+          "queryTransform": {
+            "removeParams": [
+              "utm_id"
+            ]
+          }
+        }
+      }
+    },
+    "condition": {
+      "resourceTypes": [
+        "main_frame"
+      ],
+      "regexFilter": "[?&]utm_id="
+    }
+  },
+  {
+    "id": 3006,
+    "priority": 1,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "transform": {
+          "queryTransform": {
+            "removeParams": [
+              "utm_name"
+            ]
+          }
+        }
+      }
+    },
+    "condition": {
+      "resourceTypes": [
+        "main_frame"
+      ],
+      "regexFilter": "[?&]utm_name="
+    }
+  },
+  {
+    "id": 3007,
+    "priority": 1,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "transform": {
+          "queryTransform": {
+            "removeParams": [
+              "utm_reader"
+            ]
+          }
+        }
+      }
+    },
+    "condition": {
+      "resourceTypes": [
+        "main_frame"
+      ],
+      "regexFilter": "[?&]utm_reader="
+    }
+  },
+  {
+    "id": 3008,
+    "priority": 1,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "transform": {
+          "queryTransform": {
+            "removeParams": [
+              "utm_referrer"
+            ]
+          }
+        }
+      }
+    },
+    "condition": {
+      "resourceTypes": [
+        "main_frame"
+      ],
+      "regexFilter": "[?&]utm_referrer="
+    }
+  },
+  {
+    "id": 3009,
+    "priority": 1,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "transform": {
+          "queryTransform": {
+            "removeParams": [
+              "utm_social"
+            ]
+          }
+        }
+      }
+    },
+    "condition": {
+      "resourceTypes": [
+        "main_frame"
+      ],
+      "regexFilter": "[?&]utm_social="
+    }
+  },
+  {
+    "id": 3010,
+    "priority": 1,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "transform": {
+          "queryTransform": {
+            "removeParams": [
+              "gclid"
+            ]
+          }
+        }
+      }
+    },
+    "condition": {
+      "resourceTypes": [
+        "main_frame"
+      ],
+      "regexFilter": "[?&]gclid="
+    }
+  },
+  {
+    "id": 3011,
+    "priority": 1,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "transform": {
+          "queryTransform": {
+            "removeParams": [
+              "fbclid"
+            ]
+          }
+        }
+      }
+    },
+    "condition": {
+      "resourceTypes": [
+        "main_frame"
+      ],
+      "regexFilter": "[?&]fbclid="
+    }
+  },
+  {
+    "id": 3012,
+    "priority": 1,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "transform": {
+          "queryTransform": {
+            "removeParams": [
+              "dclid"
+            ]
+          }
+        }
+      }
+    },
+    "condition": {
+      "resourceTypes": [
+        "main_frame"
+      ],
+      "regexFilter": "[?&]dclid="
+    }
+  },
+  {
+    "id": 3013,
+    "priority": 1,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "transform": {
+          "queryTransform": {
+            "removeParams": [
+              "msclkid"
+            ]
+          }
+        }
+      }
+    },
+    "condition": {
+      "resourceTypes": [
+        "main_frame"
+      ],
+      "regexFilter": "[?&]msclkid="
+    }
+  },
+  {
+    "id": 3014,
+    "priority": 1,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "transform": {
+          "queryTransform": {
+            "removeParams": [
+              "yclid"
+            ]
+          }
+        }
+      }
+    },
+    "condition": {
+      "resourceTypes": [
+        "main_frame"
+      ],
+      "regexFilter": "[?&]yclid="
+    }
+  },
+  {
+    "id": 3015,
+    "priority": 1,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "transform": {
+          "queryTransform": {
+            "removeParams": [
+              "twclid"
+            ]
+          }
+        }
+      }
+    },
+    "condition": {
+      "resourceTypes": [
+        "main_frame"
+      ],
+      "regexFilter": "[?&]twclid="
+    }
+  },
+  {
+    "id": 3016,
+    "priority": 1,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "transform": {
+          "queryTransform": {
+            "removeParams": [
+              "igshid"
+            ]
+          }
+        }
+      }
+    },
+    "condition": {
+      "resourceTypes": [
+        "main_frame"
+      ],
+      "regexFilter": "[?&]igshid="
+    }
+  },
+  {
+    "id": 3017,
+    "priority": 1,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "transform": {
+          "queryTransform": {
+            "removeParams": [
+              "mc_eid"
+            ]
+          }
+        }
+      }
+    },
+    "condition": {
+      "resourceTypes": [
+        "main_frame"
+      ],
+      "regexFilter": "[?&]mc_eid="
+    }
+  },
+  {
+    "id": 3018,
+    "priority": 1,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "transform": {
+          "queryTransform": {
+            "removeParams": [
+              "mc_cid"
+            ]
+          }
+        }
+      }
+    },
+    "condition": {
+      "resourceTypes": [
+        "main_frame"
+      ],
+      "regexFilter": "[?&]mc_cid="
+    }
+  },
+  {
+    "id": 3019,
+    "priority": 1,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "transform": {
+          "queryTransform": {
+            "removeParams": [
+              "ref_src"
+            ]
+          }
+        }
+      }
+    },
+    "condition": {
+      "resourceTypes": [
+        "main_frame"
+      ],
+      "regexFilter": "[?&]ref_src="
+    }
+  },
+  {
+    "id": 3020,
+    "priority": 1,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "transform": {
+          "queryTransform": {
+            "removeParams": [
+              "ref_url"
+            ]
+          }
+        }
+      }
+    },
+    "condition": {
+      "resourceTypes": [
+        "main_frame"
+      ],
+      "regexFilter": "[?&]ref_url="
+    }
+  },
+  {
+    "id": 3021,
+    "priority": 1,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "transform": {
+          "queryTransform": {
+            "removeParams": [
+              "spm"
+            ]
+          }
+        }
+      }
+    },
+    "condition": {
+      "resourceTypes": [
+        "main_frame"
+      ],
+      "regexFilter": "[?&]spm="
+    }
+  },
+  {
+    "id": 3022,
+    "priority": 1,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "transform": {
+          "queryTransform": {
+            "removeParams": [
+              "scm"
+            ]
+          }
+        }
+      }
+    },
+    "condition": {
+      "resourceTypes": [
+        "main_frame"
+      ],
+      "regexFilter": "[?&]scm="
+    }
+  },
+  {
+    "id": 3023,
+    "priority": 1,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "transform": {
+          "queryTransform": {
+            "removeParams": [
+              "_ga"
+            ]
+          }
+        }
+      }
+    },
+    "condition": {
+      "resourceTypes": [
+        "main_frame"
+      ],
+      "regexFilter": "[?&]_ga="
+    }
+  },
+  {
+    "id": 3024,
+    "priority": 1,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "transform": {
+          "queryTransform": {
+            "removeParams": [
+              "_gl"
+            ]
+          }
+        }
+      }
+    },
+    "condition": {
+      "resourceTypes": [
+        "main_frame"
+      ],
+      "regexFilter": "[?&]_gl="
+    }
+  },
+  {
+    "id": 3025,
+    "priority": 1,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "transform": {
+          "queryTransform": {
+            "removeParams": [
+              "_hsenc"
+            ]
+          }
+        }
+      }
+    },
+    "condition": {
+      "resourceTypes": [
+        "main_frame"
+      ],
+      "regexFilter": "[?&]_hsenc="
+    }
+  },
+  {
+    "id": 3026,
+    "priority": 1,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "transform": {
+          "queryTransform": {
+            "removeParams": [
+              "_hsmi"
+            ]
+          }
+        }
+      }
+    },
+    "condition": {
+      "resourceTypes": [
+        "main_frame"
+      ],
+      "regexFilter": "[?&]_hsmi="
+    }
+  },
+  {
+    "id": 3027,
+    "priority": 1,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "transform": {
+          "queryTransform": {
+            "removeParams": [
+              "vero_id"
+            ]
+          }
+        }
+      }
+    },
+    "condition": {
+      "resourceTypes": [
+        "main_frame"
+      ],
+      "regexFilter": "[?&]vero_id="
+    }
+  },
+  {
+    "id": 3028,
+    "priority": 1,
+    "action": {
+      "type": "redirect",
+      "redirect": {
+        "transform": {
+          "queryTransform": {
+            "removeParams": [
+              "wickedid"
+            ]
+          }
+        }
+      }
+    },
+    "condition": {
+      "resourceTypes": [
+        "main_frame"
+      ],
+      "regexFilter": "[?&]wickedid="
+    }
+  }
+]

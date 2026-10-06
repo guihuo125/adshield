@@ -1,0 +1,8 @@
+{
+  "extensionName": {
+    "message": "AdShield 广告拦截器"
+  },
+  "extensionDescription": {
+    "message": "轻量广告与追踪拦截扩展：网络层拦截 + 元素隐藏 + URL 清理 + 反广告检测规避。数据本地存储，无上传。"
+  }
+}

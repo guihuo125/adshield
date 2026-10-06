@@ -1,0 +1,251 @@
+/* AdShield 通用模态框样式 */
+.adshield-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(2px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 999999;
+  opacity: 0;
+  transition: opacity .18s ease;
+  pointer-events: none;
+}
+.adshield-modal-overlay.open {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.adshield-modal {
+  background: #ffffff;
+  border-radius: 14px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.25), 0 4px 12px rgba(0, 0, 0, 0.1);
+  padding: 20px 22px 16px;
+  max-width: 400px;
+  min-width: 320px;
+  width: calc(100% - 48px);
+  max-height: 85vh;
+  transform: scale(0.96);
+  transition: transform .18s cubic-bezier(0.34, 1.56, 0.64, 1);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.adshield-modal-message {
+  overflow-y: auto;
+  max-height: 60vh;
+}
+.adshield-modal-overlay.open .adshield-modal {
+  transform: scale(1);
+}
+
+.adshield-modal-icon {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+.adshield-modal-overlay[data-type="info"] .adshield-modal-icon {
+  background: #e7f6fe;
+  color: #0077cc;
+}
+.adshield-modal-overlay[data-type="warning"] .adshield-modal-icon {
+  background: #fff4e0;
+  color: #f79009;
+}
+.adshield-modal-overlay[data-type="danger"] .adshield-modal-icon {
+  background: #fee2e2;
+  color: #e11d20;
+}
+
+.adshield-modal-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+.adshield-modal-title {
+  font-size: 16px;
+  font-weight: 700;
+  color: #202225;
+  letter-spacing: -0.2px;
+  margin: 0;
+  padding: 0;
+}
+.adshield-modal-message {
+  font-size: 13.5px;
+  color: #636568;
+  line-height: 1.55;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* 长内容（更新日志等）：限高 + 内部滚动 */
+.adshield-modal-overlay[data-size="large"] .adshield-modal {
+  max-width: 560px;
+  max-height: 80vh;
+  padding: 16px 20px 14px;
+  gap: 8px;
+}
+.adshield-modal-overlay[data-size="large"] .adshield-modal-body {
+  gap: 4px;
+}
+.adshield-modal-overlay[data-size="large"] .adshield-modal-title {
+  margin-bottom: 4px;
+}
+/* 大尺寸：body 按内容高度，超出才滚动 */
+.adshield-modal-overlay[data-size="large"] .adshield-modal-body {
+  flex: 0 1 auto;
+  min-height: 0;
+  overflow: hidden;
+}
+/* message 区内部滚动 */
+.adshield-modal-overlay[data-size="large"] .adshield-modal-message {
+  flex: 0 1 auto;
+  min-height: 0;
+  max-height: 55vh;
+  overflow-y: auto;
+  padding-right: 6px;
+  display: block;
+}
+.adshield-modal-overlay[data-size="large"] .adshield-modal-message > * {
+  flex-shrink: 0;
+}
+/* 大尺寸弹窗的图标缩小 */
+.adshield-modal-overlay[data-size="large"] .adshield-modal-icon {
+  width: 36px;
+  height: 36px;
+}
+.adshield-modal-overlay[data-size="large"] .adshield-modal-title {
+  font-size: 15px;
+}
+/* 无图标时不显示 icon 容器 */
+.adshield-modal-overlay[data-size="large"] .adshield-modal-icon:empty {
+  display: none;
+}
+/* 大尺寸弹窗底部按钮区：贴右 */
+.adshield-modal-overlay[data-size="large"] .adshield-modal-actions {
+  margin-top: 4px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(0,0,0,.06);
+}
+.adshield-modal-overlay[data-size="large"] .adshield-modal-message {
+  max-height: 55vh;
+  overflow-y: auto;
+  padding-right: 8px;
+  font-size: 12.5px;
+  line-height: 1.65;
+}
+.adshield-modal-message::-webkit-scrollbar {
+  width: 6px;
+}
+.adshield-modal-message::-webkit-scrollbar-thumb {
+  background: rgba(0,0,0,.15);
+  border-radius: 3px;
+}
+.adshield-modal-message::-webkit-scrollbar-thumb:hover {
+  background: rgba(0,0,0,.25);
+}
+@media (prefers-color-scheme: dark) {
+  .adshield-modal-message::-webkit-scrollbar-thumb {
+    background: rgba(255,255,255,.15);
+  }
+}
+
+.adshield-modal-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+.adshield-modal-btn {
+  padding: 9px 18px;
+  border-radius: 8px;
+  border: none;
+  font-size: 13.5px;
+  font-weight: 600;
+  cursor: pointer;
+  font-family: inherit;
+  transition: background .12s, color .12s, transform .1s;
+  min-width: 72px;
+}
+.adshield-modal-btn:active {
+  transform: scale(0.97);
+}
+.adshield-modal-btn:focus {
+  outline: none;
+}
+.adshield-modal-btn:focus-visible {
+  box-shadow: 0 0 0 3px rgba(0, 174, 240, 0.3);
+}
+
+.adshield-modal-btn-cancel {
+  background: #f2f4f7;
+  color: #3f4146;
+}
+.adshield-modal-btn-cancel:hover {
+  background: #e0e2e5;
+}
+
+.adshield-modal-btn-confirm {
+  background: #00aef0;
+  color: #ffffff;
+}
+.adshield-modal-btn-confirm:hover {
+  background: #0077cc;
+}
+/* 只有"关闭"按钮时（alertOnly），用次要样式（灰底） */
+.adshield-modal-overlay[data-alert-only="true"] .adshield-modal-btn-confirm {
+  background: #f2f4f7;
+  color: #3f4146;
+}
+.adshield-modal-overlay[data-alert-only="true"] .adshield-modal-btn-confirm:hover {
+  background: #e0e2e5;
+}
+@media (prefers-color-scheme: dark) {
+  .adshield-modal-overlay[data-alert-only="true"] .adshield-modal-btn-confirm {
+    background: #3f4146;
+    color: #e6e8ea;
+  }
+  .adshield-modal-overlay[data-alert-only="true"] .adshield-modal-btn-confirm:hover {
+    background: #4a4d52;
+  }
+}
+.adshield-modal-overlay[data-type="warning"] .adshield-modal-btn-confirm {
+  background: #f79009;
+}
+.adshield-modal-overlay[data-type="warning"] .adshield-modal-btn-confirm:hover {
+  background: #e07f00;
+}
+.adshield-modal-overlay[data-type="danger"] .adshield-modal-btn-confirm {
+  background: #e11d20;
+}
+.adshield-modal-overlay[data-type="danger"] .adshield-modal-btn-confirm:hover {
+  background: #b91c1c;
+}
+
+/* 深色模式 */
+@media (prefers-color-scheme: dark) {
+  .adshield-modal {
+    background: #2f3136;
+  }
+  .adshield-modal-overlay[data-size="large"] .adshield-modal-actions {
+    border-top-color: rgba(255,255,255,.08);
+  }
+  .adshield-modal-title {
+    color: #e6e8ea;
+  }
+  .adshield-modal-message {
+    color: #a4a6a8;
+  }
+  .adshield-modal-btn-cancel {
+    background: #3f4146;
+    color: #e6e8ea;
+  }
+  .adshield-modal-btn-cancel:hover {
+    background: #4a4d52;
+  }
+}

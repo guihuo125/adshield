@@ -1,0 +1,827 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="color-scheme" content="light dark" />
+  <title>AdShield 设置</title>
+  <link rel="stylesheet" href="options.css" />
+  <link rel="stylesheet" href="shared/modal.css" />
+</head>
+<body>
+  <div class="layout">
+    <!-- ============ 侧栏 ============ -->
+    <aside class="sidebar">
+      <div class="side-brand">
+        <img src="../icons/icon32.png" class="side-logo" alt="" />
+        <span class="side-name">AdShield 设置</span>
+      </div>
+
+      <nav class="side-nav">
+        <a class="nav-item active" data-tab="privacy">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M12 3l7 4v5c0 4.5-3 8-7 9-4-1-7-4.5-7-9V7z"/>
+            <polyline points="9 12 11 14 15 10"/>
+          </svg>
+          常规设置
+        </a>
+        <a class="nav-item" data-tab="rules">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M4 4h16v6H4z"/>
+            <path d="M4 14h16v6H4z"/>
+            <line x1="8" y1="7" x2="16" y2="7"/>
+            <line x1="8" y1="17" x2="16" y2="17"/>
+          </svg>
+          规则管理
+        </a>
+        <a class="nav-item" data-tab="sites">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="5" width="18" height="14" rx="2"/>
+            <line x1="3" y1="9" x2="21" y2="9"/>
+          </svg>
+          网站
+        </a>
+        <a class="nav-item" data-tab="report">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/>
+            <polyline points="14 3 14 9 20 9"/>
+            <line x1="8" y1="13" x2="16" y2="13"/>
+            <line x1="8" y1="17" x2="13" y2="17"/>
+          </svg>
+          拦截统计
+        </a>
+        <a class="nav-item" data-tab="account" id="navAccount">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+            <circle cx="12" cy="7" r="4"/>
+          </svg>
+          账号
+          <span class="nav-badge" id="navAccountBadge" hidden></span>
+        </a>
+        <a class="nav-item" data-tab="about">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="9"/>
+            <circle cx="12" cy="10" r="2.5"/>
+            <path d="M6 19c0-3.3 2.7-6 6-6s6 2.7 6 6"/>
+          </svg>
+          关于
+        </a>
+      </nav>
+
+      <div class="side-foot">
+        <img src="../icons/icon48.png" class="foot-illust" alt="" />
+        <div class="foot-title">AdShield</div>
+        <div class="foot-desc">基于 MV3 的轻量广告拦截器</div>
+        <div class="foot-version" id="footVersion">v-</div>
+      </div>
+    </aside>
+
+    <!-- ============ 主区 ============ -->
+    <main class="content">
+
+      <!-- ================ 常规设置 ================ -->
+      <section class="panel active" data-panel="privacy">
+        <div class="panel-head">
+          <h1>常规设置</h1>
+          <p class="panel-sub">管理 AdShield 的各项防护功能。所有数据均存储于本地浏览器，不上传任何信息。</p>
+        </div>
+
+        <div class="card-grid-2">
+          <div class="feature-card">
+            <div class="fc-head">
+              <div class="fc-icon fc-icon-ads">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="9"/>
+                  <line x1="6" y1="6" x2="18" y2="18"/>
+                </svg>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="swGlobal" />
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="fc-title">全局保护</div>
+            <div class="fc-desc">一键开启或关闭所有广告与追踪拦截。</div>
+          </div>
+
+
+          <div class="feature-card">
+            <div class="fc-head">
+              <div class="fc-icon fc-icon-anti">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                  <line x1="9" y1="9" x2="15" y2="15"/>
+                  <line x1="15" y1="9" x2="9" y2="15"/>
+                </svg>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="swAntiDetect" />
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="fc-title">反拦截检测</div>
+            <div class="fc-desc">规避网站的检测脚本，不再被"请关闭广告拦截"困扰。</div>
+          </div>
+
+          <div class="feature-card">
+            <div class="fc-head">
+              <div class="fc-icon fc-icon-assist">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M8 3v3M16 3v3M3 8h3M18 8h3M3 16h3M18 16h3M8 21v-3M16 21v-3"/>
+                  <circle cx="12" cy="12" r="3.5"/>
+                </svg>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="swAssist" />
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="fc-title">浏览助手</div>
+            <div class="fc-desc">检测到网站使用广告拦截检测脚本时，自动暂停该站点保护，避免页面异常。</div>
+          </div>
+
+          <div class="feature-card">
+            <div class="fc-head">
+              <div class="fc-icon fc-icon-badge">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <rect x="3" y="3" width="18" height="18" rx="3"/>
+                  <text x="12" y="16" font-size="11" font-weight="700" text-anchor="middle" fill="currentColor" stroke="none">26</text>
+                </svg>
+              </div>
+              <label class="switch">
+                <input type="checkbox" id="swBadge" />
+                <span class="slider"></span>
+              </label>
+            </div>
+            <div class="fc-title">显示拦截数量</div>
+            <div class="fc-desc">在工具栏图标上显示当前页面已拦截的请求数。</div>
+          </div>
+
+          <div class="feature-card feature-card-placeholder"></div>
+        </div>
+
+        <div class="rule-item-static">
+          <div class="rule-icon-static">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+              <circle cx="12" cy="12" r="9"/>
+              <line x1="10" y1="9" x2="10" y2="15"/>
+              <line x1="14" y1="9" x2="14" y2="15"/>
+            </svg>
+          </div>
+          <div class="rule-body">
+            <div class="rule-title">暂停 AdShield</div>
+            <div class="rule-sub" id="globalPauseSub">暂停全局保护，1 天后自动恢复</div>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="swGlobalPause" />
+            <span class="slider"></span>
+          </label>
+        </div>
+      </section>
+
+      <!-- ================ 规则管理 ================ -->
+      <section class="panel" data-panel="rules">
+        <div class="panel-head">
+          <h1>规则管理</h1>
+          <p class="panel-sub">添加在线订阅、编写自定义拦截规则。</p>
+        </div>
+
+        <div class="card">
+          <div class="card-title">规则订阅</div>
+          <div class="card-sub">从在线来源自动更新规则（支持 JSON 和 uBlock / AdGuard 文本格式）。</div>
+
+          <!-- 统一订阅列表（已订阅 + 推荐） -->
+          <ul id="subList"></ul>
+
+          <!-- 添加自定义订阅 -->
+          <div class="sub-add-block">
+            <div class="sub-add-label">添加自定义规则源</div>
+            <div class="sub-add">
+              <input type="text" id="subUrlInput" placeholder="https://example.com/rules.txt" spellcheck="false" />
+              <button id="subAddBtn" class="btn-primary">添加</button>
+            </div>
+            <div class="hint" id="subHint"></div>
+          </div>
+
+          <div class="sub-footer">
+            <div class="sub-footer-left">
+              <span class="sub-interval-label">自动更新</span>
+              <select id="subIntervalSelect" class="setting-select">
+                <option value="0">关闭</option>
+                <option value="6">每 6 小时</option>
+                <option value="12">每 12 小时</option>
+                <option value="24">每 24 小时</option>
+                <option value="48">每 48 小时</option>
+                <option value="168">每 7 天</option>
+              </select>
+            </div>
+            <div class="sub-footer-right">
+              <span class="sub-lastcheck" id="subLastCheck"></span>
+              <button id="subUpdateAllBtn" class="btn-secondary">立即更新全部</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">自定义拦截规则</div>
+          <div class="card-sub">每行一条。保存后会立即通过 declarativeNetRequest 动态规则生效，无需重新加载扩展。</div>
+          <textarea id="rulesInput" spellcheck="false" placeholder="||ads.example.com^&#10;/banner/&#10;! 这是注释"></textarea>
+          <div class="actions">
+            <button id="saveBtn" class="btn-primary">保存并应用</button>
+            <button id="clearBtn" class="btn-secondary">清空</button>
+            <span id="status" class="status"></span>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">导入 / 导出</div>
+          <div class="card-sub">导出会把所有设置、自定义规则、白名单打包成 JSON 文件，方便备份或迁移到其他设备。</div>
+          <div class="actions">
+            <button id="exportAllBtn" class="btn-primary">导出全部设置</button>
+            <button id="importAllBtn" class="btn-secondary">导入设置</button>
+            <input type="file" id="importFile" accept=".json" style="display:none" />
+            <span id="importStatus" class="status"></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================ 网站 ================ -->
+      <section class="panel" data-panel="sites">
+        <div class="panel-head">
+          <h1>网站</h1>
+          <p class="panel-sub">已暂停保护或加入白名单的网站列表。可手动添加不想看到广告拦截的站点。</p>
+        </div>
+
+        <!-- 手动添加 -->
+        <div class="card">
+          <div class="card-title">添加网站到白名单</div>
+          <div class="card-sub">输入域名（如 example.com），该站点将不再被拦截。</div>
+          <div class="site-add-row">
+            <input type="text" id="siteAddInput" placeholder="example.com" spellcheck="false" />
+            <button id="siteAddBtn" class="btn-primary">添加</button>
+          </div>
+          <div class="site-add-hint" id="siteAddHint"></div>
+        </div>
+
+        <!-- 永久暂停 -->
+        <div class="card" id="sitesPermanentCard">
+          <div class="card-title">
+            <span>永久暂停</span>
+            <span class="card-count" id="sitesPermanentCount">0</span>
+          </div>
+          <div class="card-sub">这些网站将始终不拦截。点击「恢复」重新开启。</div>
+          <ul id="sitesPermanentList" class="sites-list"></ul>
+        </div>
+
+        <!-- 临时暂停 -->
+        <div class="card" id="sitesTempCard">
+          <div class="card-title">
+            <span>临时暂停</span>
+            <span class="card-count" id="sitesTempCount">0</span>
+          </div>
+          <div class="card-sub">这些网站将在设定时间后自动恢复拦截。</div>
+          <ul id="sitesTempList" class="sites-list"></ul>
+        </div>
+
+        <div class="actions actions-right">
+          <button id="clearAllSitesBtn" class="btn-secondary">清空全部白名单</button>
+        </div>
+      </section>
+
+      <!-- ================ 拦截统计 ================ -->
+      <section class="panel" data-panel="report">
+        <div class="panel-head">
+          <h1>拦截统计</h1>
+          <p class="panel-sub">按时间与类型查看 AdShield 的拦截情况，数据仅存储于本地浏览器。</p>
+        </div>
+
+        <div class="stats-grid-3">
+          <div class="stat-box">
+            <div class="stat-box-num" id="repTotal">0</div>
+            <div class="stat-box-label">累计拦截</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-box-num" id="repPages">0</div>
+            <div class="stat-box-label">访问过的站点</div>
+          </div>
+          <div class="stat-box">
+            <div class="stat-box-num" id="repDomains">0</div>
+            <div class="stat-box-label">拦截的域名</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="trend-head">
+            <div class="trend-title-text">各类型拦截趋势</div>
+            <div class="select-wrap">
+              <select class="select-simple" id="rangeSelect">
+                <option value="1">24 小时</option>
+                <option value="7" selected>一周</option>
+                <option value="30">一个月</option>
+                <option value="365">一年</option>
+              </select>
+              <svg class="select-chevron" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="6 9 12 15 18 9"/>
+              </svg>
+            </div>
+          </div>
+          <div class="trend-wrap">
+            <svg class="trend-svg" id="trendSvg" viewBox="0 0 600 220" preserveAspectRatio="none"></svg>
+          </div>
+          <div class="trend-series" id="trendSeries"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">各类型占比</div>
+          <div class="card-sub">各分类拦截量占比。</div>
+          <div class="dist-bar" id="distBar"></div>
+          <div class="dist-legend" id="distLegend"></div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">站点排行</div>
+          <div class="card-sub">访问过程中拦截量最多的页面。</div>
+          <ul id="pageBars" class="tracker-bars"></ul>
+        </div>
+
+        <div class="card">
+          <div class="card-title">Top 拦截域名</div>
+          <div class="card-sub">按拦截次数排序的第三方域名。</div>
+          <ul id="trackerBars" class="tracker-bars"></ul>
+        </div>
+
+        <div class="actions actions-right">
+          <button id="mockDataBtn" class="btn-secondary" title="仅用于测试图表效果">填充模拟数据</button>
+          <button id="exportBtn" class="btn-primary">导出日志</button>
+          <button id="resetStatsBtn" class="btn-secondary">重置统计</button>
+        </div>
+      </section>
+
+      <!-- ================ 关于 ================ -->
+      <section class="panel" data-panel="about">
+        <div class="panel-head">
+          <h1>关于 AdShield</h1>
+          <p class="panel-sub">基于 Manifest V3 的轻量广告拦截扩展。</p>
+        </div>
+
+        <div class="about-hero">
+          <img src="../icons/icon128.png" class="about-logo" alt="" />
+          <div>
+            <div class="about-name">AdShield</div>
+            <div class="about-version" id="aboutVersion">v-</div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">帮助与支持</div>
+          <div class="link-list">
+            <button class="link-item" data-url="https://github.com/guihuo125/adshield">
+              <div class="link-icon link-icon-github">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor">
+                  <path d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"/>
+                </svg>
+              </div>
+              <div class="link-body">
+                <div class="link-title">GitHub 项目</div>
+                <div class="link-desc">浏览源码与开发文档</div>
+              </div>
+              <svg class="link-arrow" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                <polyline points="15 3 21 3 21 9"/>
+                <line x1="10" y1="14" x2="21" y2="3"/>
+              </svg>
+            </button>
+
+            <button class="link-item" data-url="https://microsoftedge.microsoft.com/addons/detail/ogjodahjklhodkmnjhopkopflngicokg">
+              <div class="link-icon link-icon-store">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M3 9l1-5h16l1 5"/>
+                  <path d="M3 9a3 3 0 0 0 6 0 3 3 0 0 0 6 0 3 3 0 0 0 6 0"/>
+                  <path d="M5 9v11a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V9"/>
+                  <line x1="10" y1="14" x2="14" y2="14"/>
+                </svg>
+              </div>
+              <div class="link-body">
+                <div class="link-title">Edge 商店</div>
+                <div class="link-desc">在商店页面评分或评价</div>
+              </div>
+              <svg class="link-arrow" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                <polyline points="15 3 21 3 21 9"/>
+                <line x1="10" y1="14" x2="21" y2="3"/>
+              </svg>
+            </button>
+
+            <button class="link-item" data-action="checkUpdate" id="checkUpdateBtn">
+              <div class="link-icon link-icon-update">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 12a9 9 0 1 1-3-6.7"/>
+                  <polyline points="21 3 21 9 15 9"/>
+                </svg>
+              </div>
+              <div class="link-body">
+                <div class="link-title">检查更新</div>
+                <div class="link-desc" id="checkUpdateDesc">查看新版本与更新日志</div>
+              </div>
+              <svg class="link-arrow" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                <polyline points="15 3 21 3 21 9"/>
+                <line x1="10" y1="14" x2="21" y2="3"/>
+              </svg>
+            </button>
+            <button class="link-item" data-url="https://github.com/guihuo125/adshield/issues">
+              <div class="link-icon link-icon-issue">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="12" y1="8" x2="12" y2="12"/>
+                  <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+              </div>
+              <div class="link-body">
+                <div class="link-title">反馈问题</div>
+                <div class="link-desc">报告 bug 或建议新功能</div>
+              </div>
+              <svg class="link-arrow" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/>
+                <polyline points="15 3 21 3 21 9"/>
+                <line x1="10" y1="14" x2="21" y2="3"/>
+              </svg>
+            </button>
+
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">功能特性</div>
+          <div class="feature-grid">
+            <div class="feature-item">
+              <div class="fi-dot" style="background:#FD3638"></div>
+              <div class="fi-body">
+                <div class="fi-name">广告拦截</div>
+                <div class="fi-desc">横幅、弹窗、视频贴片、信息流</div>
+              </div>
+            </div>
+            <div class="feature-item">
+              <div class="fi-dot" style="background:#A78BFA"></div>
+              <div class="fi-body">
+                <div class="fi-name">追踪防护</div>
+                <div class="fi-desc">第三方跨站追踪器</div>
+              </div>
+            </div>
+            <div class="feature-item">
+              <div class="fi-dot" style="background:#715DEE"></div>
+              <div class="fi-body">
+                <div class="fi-name">浏览助手</div>
+                <div class="fi-desc">遇广告拦截检测时暂停本站保护</div>
+              </div>
+            </div>
+            <div class="feature-item">
+              <div class="fi-dot" style="background:#F79009"></div>
+              <div class="fi-body">
+                <div class="fi-name">干扰过滤</div>
+                <div class="fi-desc">推送、弹窗挂件、反拦截脚本</div>
+              </div>
+            </div>
+            <div class="feature-item">
+              <div class="fi-dot" style="background:#00AEF0"></div>
+              <div class="fi-body">
+                <div class="fi-name">URL 清理</div>
+                <div class="fi-desc">utm 等追踪参数</div>
+              </div>
+            </div>
+            <div class="feature-item">
+              <div class="fi-dot" style="background:#7F1D1D"></div>
+              <div class="fi-body">
+                <div class="fi-name">恶意防护</div>
+                <div class="fi-desc">挖矿脚本、恶意域名</div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title">技术栈</div>
+          <div class="tech-grid">
+            <div class="tech-item">
+              <div class="tech-icon tech-icon-manifest">M3</div>
+              <div class="tech-body">
+                <div class="tech-name">Manifest V3</div>
+                <div class="tech-desc">最新扩展规范</div>
+              </div>
+            </div>
+            <div class="tech-item">
+              <div class="tech-icon tech-icon-dnr">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 3l7 4v5c0 4.5-3 8-7 9-4-1-7-4.5-7-9V7z"/>
+                </svg>
+              </div>
+              <div class="tech-body">
+                <div class="tech-name">declarativeNetRequest</div>
+                <div class="tech-desc">网络层原生拦截</div>
+              </div>
+            </div>
+            <div class="tech-item">
+              <div class="tech-icon tech-icon-rules">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/>
+                  <polyline points="14 3 14 9 20 9"/>
+                  <line x1="8" y1="13" x2="16" y2="13"/>
+                  <line x1="8" y1="17" x2="13" y2="17"/>
+                </svg>
+              </div>
+              <div class="tech-body">
+                <div class="tech-name">5 组静态规则</div>
+                <div class="tech-desc">+ 动态规则</div>
+              </div>
+            </div>
+            <div class="tech-item">
+              <div class="tech-icon tech-icon-cs">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="16 18 22 12 16 6"/>
+                  <polyline points="8 6 2 12 8 18"/>
+                </svg>
+              </div>
+              <div class="tech-body">
+                <div class="tech-name">Content Scripts</div>
+                <div class="tech-desc">元素隐藏 + 反拦截</div>
+              </div>
+            </div>
+            <div class="tech-item">
+              <div class="tech-icon tech-icon-cloud">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/>
+                  <polyline points="9 15 12 12 15 15"/>
+                  <line x1="12" y1="12" x2="12" y2="18"/>
+                </svg>
+              </div>
+              <div class="tech-body">
+                <div class="tech-name">Supabase</div>
+                <div class="tech-desc">云端账号与配置同步</div>
+              </div>
+            </div>
+            <div class="tech-item">
+              <div class="tech-icon tech-icon-storage">
+                <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <ellipse cx="12" cy="5" rx="9" ry="3"/>
+                  <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"/>
+                  <path d="M3 12c0 1.66 4 3 9 3s9-1.34 9-3"/>
+                </svg>
+              </div>
+              <div class="tech-body">
+                <div class="tech-name">storage.local</div>
+                <div class="tech-desc">数据本地存储</div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ================ 账号 ================ -->
+      <section class="panel" data-panel="account">
+        <div class="panel-head">
+          <h1>账号</h1>
+          <p class="panel-sub">登录后可跨设备同步配置、白名单与订阅列表。</p>
+        </div>
+
+        <!-- 骨架屏（加载中） -->
+        <div id="accountSkeleton">
+          <div class="card account-card">
+            <div class="account-hero">
+              <div class="skeleton skeleton-avatar"></div>
+              <div class="account-hero-text">
+                <div class="skeleton skeleton-line skeleton-line-lg"></div>
+                <div class="skeleton skeleton-line skeleton-line-sm"></div>
+              </div>
+            </div>
+          </div>
+          <div class="card">
+            <div class="skeleton skeleton-line skeleton-line-md"></div>
+            <div class="skeleton skeleton-block" style="margin-top: 12px"></div>
+            <div class="skeleton skeleton-block" style="margin-top: 8px"></div>
+            <div class="skeleton skeleton-block" style="margin-top: 8px"></div>
+          </div>
+        </div>
+
+        <!-- 未登录状态 -->
+        <div id="accountGuest" hidden>
+          <div class="card account-card">
+            <div class="account-hero">
+              <div class="account-avatar-guest">
+                <svg viewBox="0 0 24 24" width="32" height="32" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/>
+                  <circle cx="12" cy="7" r="4"/>
+                </svg>
+              </div>
+              <div class="account-hero-text">
+                <div class="account-hero-title">未登录</div>
+                <div class="account-hero-desc">登录后可在任意设备恢复您的设置</div>
+              </div>
+            </div>
+
+            <div class="account-features">
+              <div class="account-feature">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M21 12a9 9 0 1 1-9-9"/>
+                  <polyline points="21 3 21 9 15 9"/>
+                </svg>
+                配置 / 白名单 / 自定义规则云端同步
+              </div>
+              <div class="account-feature">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <path d="M12 3l7 4v5c0 4.5-3 8-7 9-4-1-7-4.5-7-9V7z"/>
+                  <polyline points="9 12 11 14 15 10"/>
+                </svg>
+                数据加密存储，不上传浏览记录
+              </div>
+              <div class="account-feature">
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
+                换设备一键恢复所有订阅
+              </div>
+            </div>
+
+            <div class="account-actions">
+              <button class="btn-primary" id="btnLogin">登录</button>
+              <button class="btn-secondary" id="btnRegister">注册</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- 已登录状态 -->
+        <div id="accountUser" hidden>
+          <div class="card account-card">
+            <div class="account-hero">
+              <div class="account-avatar" id="accountAvatar" title="点击修改头像">
+                <span id="accountInitial">U</span>
+                <div class="avatar-edit-overlay">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+                    <circle cx="12" cy="13" r="4"/>
+                  </svg>
+                </div>
+              </div>
+              <input type="file" id="avatarFileInput" accept="image/*" style="display:none" />
+              <div class="account-hero-text">
+                <div class="account-hero-title" id="accountEmail">user@example.com</div>
+                <div class="account-hero-desc">
+                  <span class="account-badge" id="accountPlanBadge">免费版</span>
+                  <span id="accountLoginTime">已登录</span>
+                  <span class="account-sync-time" id="accountSyncTime" style="display:none"></span>
+                </div>
+                <div class="account-device" id="accountDevice">
+                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="2" y="3" width="20" height="14" rx="2"/>
+                    <line x1="8" y1="21" x2="16" y2="21"/>
+                    <line x1="12" y1="17" x2="12" y2="21"/>
+                  </svg>
+                  <span id="accountDeviceName">正在识别设备...</span>
+                </div>
+              </div>
+              <button class="btn-secondary btn-small" id="btnLogout">退出</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">云端同步</div>
+            <div class="card-sub">选择需要同步到云端的项目。关闭后仅本地保存。</div>
+
+            <div class="sync-group-title">基础数据</div>
+            <div class="sync-list">
+              <label class="sync-item">
+                <div class="sync-info">
+                  <div class="sync-name">基础设置</div>
+                  <div class="sync-desc">全局开关 / 规则集 / 元素隐藏等</div>
+                </div>
+                <div class="switch-toggle">
+                  <input type="checkbox" id="syncSettings" checked />
+                  <span class="slider"></span>
+                </div>
+              </label>
+              <label class="sync-item">
+                <div class="sync-info">
+                  <div class="sync-name">白名单</div>
+                  <div class="sync-desc">永久白名单与临时暂停记录</div>
+                </div>
+                <div class="switch-toggle">
+                  <input type="checkbox" id="syncWhitelist" checked />
+                  <span class="slider"></span>
+                </div>
+              </label>
+            </div>
+
+            <div class="sync-group-title">高级数据</div>
+            <div class="sync-list">
+              <label class="sync-item">
+                <div class="sync-info">
+                  <div class="sync-name">自定义规则</div>
+                  <div class="sync-desc">手写的拦截规则</div>
+                </div>
+                <div class="switch-toggle">
+                  <input type="checkbox" id="syncRules" checked />
+                  <span class="slider"></span>
+                </div>
+              </label>
+              <label class="sync-item">
+                <div class="sync-info">
+                  <div class="sync-name">规则订阅</div>
+                  <div class="sync-desc">订阅源 URL 与自动更新设置</div>
+                </div>
+                <div class="switch-toggle">
+                  <input type="checkbox" id="syncSubscriptions" checked />
+                  <span class="slider"></span>
+                </div>
+              </label>
+            </div>
+            <div class="actions actions-right">
+              <button class="btn-secondary" id="btnDownload">从云端恢复</button>
+              <button class="btn-primary" id="btnUpload">上传到云端</button>
+            </div>
+            <div class="hint" id="syncHint"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">数据备份</div>
+            <div class="card-sub">导出为加密 JSON 文件，可手动备份或迁移到其它设备。</div>
+            <div class="link-list">
+              <button class="link-item" id="btnExportData">
+                <div class="link-icon link-icon-export">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="7 10 12 15 17 10"/>
+                    <line x1="12" y1="15" x2="12" y2="3"/>
+                  </svg>
+                </div>
+                <div class="link-body">
+                  <div class="link-title">导出数据</div>
+                  <div class="link-desc">下载全部配置为 JSON 文件</div>
+                </div>
+                <svg class="link-arrow" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 6 15 12 9 18"/></svg>
+              </button>
+              <button class="link-item" id="btnImportData">
+                <div class="link-icon link-icon-import">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+                    <polyline points="17 8 12 3 7 8"/>
+                    <line x1="12" y1="3" x2="12" y2="15"/>
+                  </svg>
+                </div>
+                <div class="link-body">
+                  <div class="link-title">导入数据</div>
+                  <div class="link-desc">从 JSON 文件恢复配置</div>
+                </div>
+                <svg class="link-arrow" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 6 15 12 9 18"/></svg>
+              </button>
+              <input type="file" id="importFileInput" accept=".json,application/json" style="display:none" />
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">登录设备</div>
+            <div class="card-sub">显示当前账号已登录的设备。可移除未知设备。</div>
+            <ul id="deviceList" class="device-list"></ul>
+            <div class="hint" id="deviceHint"></div>
+          </div>
+
+          <div class="card">
+            <div class="card-title">账号设置</div>
+            <div class="link-list">
+              <button class="link-item" id="btnChangePassword">
+                <div class="link-icon link-icon-password">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <rect x="3" y="11" width="18" height="11" rx="2"/>
+                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                  </svg>
+                </div>
+                <div class="link-body">
+                  <div class="link-title">修改密码</div>
+                  <div class="link-desc">为账号设置新密码</div>
+                </div>
+                <svg class="link-arrow" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 6 15 12 9 18"/></svg>
+              </button>
+
+              <button class="link-item" id="btnDeleteAccount">
+                <div class="link-icon link-icon-danger">
+                  <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <polyline points="3 6 5 6 21 6"/>
+                    <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                    <path d="M10 11v6M14 11v6"/>
+                  </svg>
+                </div>
+                <div class="link-body">
+                  <div class="link-title" style="color:#e11d20">删除账号</div>
+                  <div class="link-desc">永久删除账号与云端数据</div>
+                </div>
+                <svg class="link-arrow" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 6 15 12 9 18"/></svg>
+              </button>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+  <script src="shared/modal.js"></script>
+  <script src="shared/auth.js"></script>
+  <script src="options.js"></script>
+</body>
+</html>

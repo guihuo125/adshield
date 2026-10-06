@@ -1,0 +1,8 @@
+{
+  "extensionName": {
+    "message": "AdShield Ad Blocker"
+  },
+  "extensionDescription": {
+    "message": "Lightweight ad & tracker blocker: network-level blocking, element hiding, URL cleaning, and anti-adblock bypass. All data stored locally, no uploads."
+  }
+}

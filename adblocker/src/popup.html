@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="color-scheme" content="light dark" />
+  <link rel="stylesheet" href="popup.css" />
+  <link rel="stylesheet" href="shared/modal.css" />
+</head>
+<body>
+  <!-- Header -->
+  <header class="header">
+    <div class="brand">
+      <img src="../icons/icon32.png" class="logo" alt="" />
+      <span class="brand-name">AdShield</span>
+    </div>
+    <button class="icon-btn" id="menuBtn" title="设置">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <line x1="4" y1="7" x2="20" y2="7"/>
+        <line x1="4" y1="12" x2="20" y2="12"/>
+        <line x1="4" y1="17" x2="20" y2="17"/>
+      </svg>
+    </button>
+  </header>
+
+  <!-- Pause card -->
+  <div class="pause-card" id="pauseCard">
+    <button class="pause-main" id="pauseBtn">
+      <svg id="pauseIcon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="9"/>
+        <line x1="10" y1="9" x2="10" y2="15"/>
+        <line x1="14" y1="9" x2="14" y2="15"/>
+      </svg>
+      <span id="pauseLabel">在这个网站上暂停</span>
+    </button>
+    <div class="pause-type-wrap">
+      <button class="pause-type" id="pauseTypeBtn">
+        <span id="pauseTypeLabel">1 小时</span>
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+          <polyline points="6 9 12 15 18 9"/>
+        </svg>
+      </button>
+      <div class="pause-menu" id="pauseMenu">
+        <button class="pause-option active" data-min="60">
+          <div class="po-main">
+            <div class="po-label">1 小时</div>
+            <svg class="po-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
+          <div class="po-desc">此网站将暂停 1 小时</div>
+        </button>
+        <button class="pause-option" data-min="1440">
+          <div class="po-main">
+            <div class="po-label">1 天</div>
+            <svg class="po-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
+          <div class="po-desc">该网站将暂停一天</div>
+        </button>
+        <button class="pause-option" data-min="0">
+          <div class="po-main">
+            <div class="po-label">始终</div>
+            <svg class="po-check" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>
+          </div>
+          <div class="po-desc">此网站将始终暂停。您可以随时在设置中恢复。</div>
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Section title -->
+  <div class="section-head">
+    <div class="section-title">
+      <span class="site-dot"></span>
+      <span id="siteHost">—</span>
+    </div>
+    <div class="section-count" id="siteCount" hidden>0</div>
+  </div>
+
+  <!-- Wheel -->
+  <div class="wheel-wrap">
+    <svg class="wheel" viewBox="0 0 36 36">
+      <circle class="wheel-bg" cx="18" cy="18" r="15.9155"/>
+      <path class="seg seg-ads"     stroke-dasharray="0 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+      <path class="seg seg-track"   stroke-dasharray="0 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+      <path class="seg seg-anno"    stroke-dasharray="0 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+      <path class="seg seg-url"     stroke-dasharray="0 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+      <path class="seg seg-malware" stroke-dasharray="0 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+    </svg>
+  </div>
+
+  <!-- Stats cards -->
+  <div class="stats">
+    <div class="stat-card">
+      <div class="stat-icon stat-icon-block">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round">
+          <circle cx="12" cy="12" r="9"/>
+          <line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </div>
+      <div class="stat-body">
+        <div class="stat-num" id="statSite">0</div>
+        <div class="stat-label">本站已拦截</div>
+      </div>
+    </div>
+    <div class="stat-card">
+      <div class="stat-icon stat-icon-total">
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M12 3l7 4v5c0 4.5-3 8-7 9-4-1-7-4.5-7-9V7z"/>
+        </svg>
+      </div>
+      <div class="stat-body">
+        <div class="stat-num" id="statTotal">0</div>
+        <div class="stat-label">累计拦截</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 分类统计 chips -->
+  <div class="cat-row" id="catRow"></div>
+
+  <!-- Menu overlay -->
+  <div class="menu-overlay" id="menuOverlay">
+    <div class="menu-panel">
+      <div class="menu-header">
+        <span>设置</span>
+        <button class="icon-btn" id="menuCloseBtn">
+          <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <line x1="6" y1="6" x2="18" y2="18"/>
+            <line x1="18" y1="6" x2="6" y2="18"/>
+          </svg>
+        </button>
+      </div>
+
+      <div class="menu-section-title">全局</div>
+      <div class="menu-list">
+        <label class="menu-row">
+          <div class="menu-row-label">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0">
+              <path d="M12 3l7 4v5c0 4.5-3 8-7 9-4-1-7-4.5-7-9V7z"/>
+            </svg>
+            <span>启用 AdShield</span>
+          </div>
+          <div class="switch-toggle">
+            <input type="checkbox" id="swGlobalEnabled" />
+            <span class="slider"></span>
+          </div>
+        </label>
+      </div>
+
+      <div class="menu-section-title">防护类型</div>
+      <div class="menu-list" id="rulesetList"></div>
+
+      <div class="menu-section-title">工具</div>
+      <div class="menu-list">
+        <button class="menu-action" id="actHideBlock">
+          <div class="ma-left">
+            <span class="ma-icon ma-icon-hide">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+                <circle cx="12" cy="12" r="3"/>
+                <line x1="3" y1="3" x2="21" y2="21"/>
+              </svg>
+            </span>
+            <span>隐藏内容块</span>
+          </div>
+          <svg class="ma-chevron" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 6 15 12 9 18"/></svg>
+        </button>
+
+        <button class="menu-action" id="actReport">
+          <div class="ma-left">
+            <span class="ma-icon ma-icon-report">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="9"/>
+                <line x1="12" y1="8" x2="12" y2="12"/>
+                <line x1="12" y1="16" x2="12" y2="16"/>
+              </svg>
+            </span>
+            <span>报告问题</span>
+          </div>
+          <svg class="ma-chevron" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 6 15 12 9 18"/></svg>
+        </button>
+
+        <button class="menu-action" id="actClearData">
+          <div class="ma-left">
+            <span class="ma-icon ma-icon-clear">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <polyline points="3 6 5 6 21 6"/>
+                <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>
+                <path d="M10 11v6M14 11v6"/>
+              </svg>
+            </span>
+            <span>清除浏览数据</span>
+          </div>
+          <svg class="ma-chevron" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 6 15 12 9 18"/></svg>
+        </button>
+
+        <button class="menu-action" id="actLogger">
+          <div class="ma-left">
+            <span class="ma-icon ma-icon-logger">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+              </svg>
+            </span>
+            <span>查看详细日志</span>
+          </div>
+          <svg class="ma-chevron" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 6 15 12 9 18"/></svg>
+        </button>
+
+        <button class="menu-action" id="actSiteSettings">
+          <div class="ma-left">
+            <span class="ma-icon ma-icon-settings">
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <circle cx="12" cy="12" r="3"/>
+                <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+              </svg>
+            </span>
+            <span>打开网站设置</span>
+          </div>
+          <svg class="ma-chevron" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+        </button>
+      </div>
+
+      <div class="menu-footer">
+        <button class="menu-footer-btn" id="optionsBtn">规则管理</button>
+        <button class="menu-footer-btn" id="resetBtn">重置统计</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="shared/modal.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

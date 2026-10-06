@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="color-scheme" content="light dark" />
+  <title>AdShield 详细日志</title>
+  <link rel="stylesheet" href="logger.css" />
+  <link rel="stylesheet" href="shared/modal.css" />
+</head>
+<body>
+  <header class="lheader">
+    <div class="brand">
+      <img src="../icons/icon32.png" class="logo" alt="" />
+      <h1>AdShield · 详细日志</h1>
+    </div>
+    <div class="actions">
+      <button class="btn" id="refreshBtn">刷新</button>
+      <button class="btn" id="exportBtn">导出</button>
+      <button class="btn btn-danger" id="clearBtn">清空</button>
+    </div>
+  </header>
+
+  <div class="stats-row">
+    <div class="stat-box"><div class="stat-num" id="totalCount">0</div><div class="stat-label">累计拦截</div></div>
+    <div class="stat-box"><div class="stat-num" id="logCount">0</div><div class="stat-label">日志条数</div></div>
+  </div>
+
+  <div class="filter-row">
+    <input type="text" id="filterInput" placeholder="按 URL / 域名过滤..." />
+    <select id="catFilter">
+      <option value="">全部分类</option>
+      <option value="ads">广告</option>
+      <option value="tracking">追踪</option>
+      <option value="annoyances">干扰</option>
+      <option value="url_clean">URL 清理</option>
+      <option value="malware">恶意防护</option>
+    </select>
+  </div>
+
+  <div class="table-wrap">
+    <table id="logTable">
+      <thead>
+        <tr>
+          <th style="width:110px">时间</th>
+          <th style="width:80px">分类</th>
+          <th>被拦截 URL</th>
+          <th style="width:180px">来源页面</th>
+        </tr>
+      </thead>
+      <tbody id="logBody"></tbody>
+    </table>
+    <div id="emptyTip" class="empty-tip">暂无日志</div>
+  </div>
+
+  <script src="logger.js"></script>
+</body>
+</html>

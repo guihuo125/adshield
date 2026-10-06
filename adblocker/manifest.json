@@ -1,0 +1,102 @@
+{
+  "manifest_version": 3,
+  "name": "__MSG_extensionName__",
+  "version": "2.9.8",
+  "description": "__MSG_extensionDescription__",
+  "default_locale": "zh_CN",
+  "permissions": [
+    "declarativeNetRequest",
+    "declarativeNetRequestFeedback",
+    "storage",
+    "alarms",
+    "contextMenus",
+    "scripting"
+  ],
+  "host_permissions": [
+    "<all_urls>"
+  ],
+  "optional_permissions": [
+    "browsingData"
+  ],
+  "declarative_net_request": {
+    "rule_resources": [
+      {
+        "id": "ads",
+        "enabled": true,
+        "path": "rules/ads.json"
+      },
+      {
+        "id": "tracking",
+        "enabled": true,
+        "path": "rules/tracking.json"
+      },
+      {
+        "id": "annoyances",
+        "enabled": true,
+        "path": "rules/annoyances.json"
+      },
+      {
+        "id": "url_clean",
+        "enabled": true,
+        "path": "rules/url-tracking.json"
+      },
+      {
+        "id": "malware",
+        "enabled": true,
+        "path": "rules/malware.json"
+      }
+    ]
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "src/content/cosmetic.js",
+        "src/content/anti-detect.js",
+        "src/content/picker.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true,
+      "match_about_blank": true
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "action": {
+    "default_title": "AdShield 广告拦截器",
+    "default_popup": "src/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "options_page": "src/options.html",
+  "commands": {
+    "toggle-global": {
+      "suggested_key": {
+        "default": "Alt+A"
+      },
+      "description": "全局暂停 / 恢复 AdShield"
+    },
+    "toggle-site": {
+      "suggested_key": {
+        "default": "Alt+S"
+      },
+      "description": "在当前网站暂停 / 恢复"
+    }
+  },
+  "background": {
+    "service_worker": "src/background.js"
+  },
+  "content_security_policy": {
+    "extension_pages": "script-src 'self'; object-src 'self'"
+  }
+}
