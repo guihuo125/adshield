@@ -349,10 +349,10 @@ async function autoCheckSubscriptions() {
 $$(".nav-item").forEach(item => {
   item.addEventListener("click", () => {
     const tab = item.dataset.tab;
+    document.documentElement.setAttribute("data-route", tab);
     $$(".nav-item").forEach(n => n.classList.toggle("active", n === item));
     $$(".panel").forEach(p => p.classList.toggle("active", p.dataset.panel === tab));
     location.hash = tab;
-    // 打开规则页 → 自动检查更新
     if (tab === "rules") autoCheckSubscriptions();
   });
 });
@@ -1685,8 +1685,8 @@ render();
 // 侧栏 hash 变化监听
 window.addEventListener("hashchange", () => {
   const { tab } = parseHash();
+  document.documentElement.setAttribute("data-route", tab);
   const item = document.querySelector(`.nav-item[data-tab="${tab}"]`);
   if (item) item.click();
-  // 直接访问 #rules 也触发检查
   if (tab === "rules") autoCheckSubscriptions();
 });

@@ -114,6 +114,25 @@ html, body {
   font-weight: 600;
 }
 .nav-item.active svg { stroke: var(--color-brand-600); }
+/* 首屏通过 <html data-route> 立即高亮（防闪烁） */
+html[data-route="privacy"] .nav-item[data-tab="privacy"],
+html[data-route="rules"] .nav-item[data-tab="rules"],
+html[data-route="sites"] .nav-item[data-tab="sites"],
+html[data-route="report"] .nav-item[data-tab="report"],
+html[data-route="account"] .nav-item[data-tab="account"],
+html[data-route="about"] .nav-item[data-tab="about"] {
+  background: var(--bg-brand-soft);
+  color: var(--color-brand-600);
+  font-weight: 600;
+}
+html[data-route="privacy"] .nav-item[data-tab="privacy"] svg,
+html[data-route="rules"] .nav-item[data-tab="rules"] svg,
+html[data-route="sites"] .nav-item[data-tab="sites"] svg,
+html[data-route="report"] .nav-item[data-tab="report"] svg,
+html[data-route="account"] .nav-item[data-tab="account"] svg,
+html[data-route="about"] .nav-item[data-tab="about"] svg {
+  stroke: var(--color-brand-600);
+}
 
 .side-foot {
   margin-top: auto;
@@ -370,6 +389,15 @@ html[data-theme="dark"] .cosmetic-remove:hover {
 }
 .panel { display: none; }
 .panel.active { display: block; }
+/* 首屏通过 <html data-route> 立即显示对应面板（防闪烁） */
+html[data-route="privacy"] .panel[data-panel="privacy"],
+html[data-route="rules"] .panel[data-panel="rules"],
+html[data-route="sites"] .panel[data-panel="sites"],
+html[data-route="report"] .panel[data-panel="report"],
+html[data-route="account"] .panel[data-panel="account"],
+html[data-route="about"] .panel[data-panel="about"] {
+  display: block;
+}
 
 .panel-head { margin-bottom: 22px; }
 .panel-head h1 {
