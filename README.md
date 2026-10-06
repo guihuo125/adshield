@@ -28,7 +28,11 @@
 
 ### 从 Edge 商店安装（推荐）
 
-> 🚧 **上架审核中**，敬请期待
+[![Edge 商店](https://img.shields.io/badge/Edge-商店-blue?logo=microsoftedge)](https://microsoftedge.microsoft.com/addons/detail/ogjodahjklhodkmnjhopkopflngicokg)
+
+> 💡 **商店版本 v2.0.0**，最新版 v2.9.8（含账号系统 + 云同步）正在审核中。
+>
+> 想体验最新功能 → 用下方「开发者模式加载」安装 zip。
 
 ### 开发者模式加载
 
