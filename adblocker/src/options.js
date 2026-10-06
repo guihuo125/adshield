@@ -370,7 +370,7 @@ function parseHash() {
   return { tab, params };
 }
 const { tab: initialTab, params: initialParams } = parseHash();
-// 注意：内联脚本已在 head 里设置了 active 状态（避免闪烁）
+// nav-init.js（外部脚本）已在 head 里设置 active 状态（避免闪烁）
 // 这里只需触发规则页的自动检查（不重复切换 active）
 if (initialTab === "rules") {
   autoCheckSubscriptions();
