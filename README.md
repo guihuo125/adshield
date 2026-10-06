@@ -2,7 +2,7 @@
 
 > 轻量、隐私优先的广告与追踪拦截扩展，基于 Manifest V3 开发。
 
-[![Version](https://img.shields.io/badge/version-2.9.8-blue)]()
+[![Version](https://img.shields.io/badge/version-2.9.70-blue)]()
 [![Manifest](https://img.shields.io/badge/Manifest-V3-green)]()
 [![License](https://img.shields.io/badge/license-MIT-orange)]()
 
@@ -20,9 +20,15 @@
 | 📡 **规则订阅** | 支持在线订阅 EasyList China / AdGuard 等规则源，自动更新 |
 | ⚙️ **自定义规则** | 支持 AdGuard / uBlock 风格自定义规则 |
 | 📊 **拦截统计** | 分类趋势图、Top 域名榜（数据仅本地存储） |
-| 👤 **账号系统** | 支持注册/登录、修改密码、多设备管理（可选，基于 Supabase） |
+| 👤 **账号系统** | 注册/登录、修改密码、多设备管理（可选，基于 Supabase） |
 | ☁️ **云同步** | 跨设备同步设置、白名单、自定义规则（可选，需登录） |
 | 💾 **数据备份** | 导出/导入 JSON 配置文件，一键迁移 |
+| 🔐 **安全增强** | 密码强度策略（≥8 位 + 大小写 + 数字）+ 实时强度指示 + 登录失败锁定 + 会话超时 |
+| 🌙 **深色模式** | 亮色 / 跟随系统 / 暗色三选一 |
+| 🔔 **拦截通知** | 拦截广告时可选弹系统通知（节流控制） |
+| 📋 **元素隐藏规则** | 可视化查看/删除自定义 `##` 规则，支持导出 |
+| 📊 **日志导出** | 详细日志支持导出 JSON / CSV（Excel 直接打开） |
+| ⚡ **规则更新检测** | 打开规则页自动检查订阅更新，有变化时提示 |
 
 ## 📦 安装
 
@@ -30,9 +36,9 @@
 
 [![Edge 商店](https://img.shields.io/badge/Edge-商店-blue?logo=microsoftedge)](https://microsoftedge.microsoft.com/addons/detail/ogjodahjklhodkmnjhopkopflngicokg)
 
-> 💡 **商店版本 v2.0.0**，最新版 v2.9.8（含账号系统 + 云同步）正在审核中。
+> 💡 **商店版本 v2.0.0**，最新版 v2.9.70 正在审核/待发布。
 >
-> 想体验最新功能 → 用下方「开发者模式加载」安装 zip。
+> 想体验最新功能 → 用下方「开发者模式加载」安装 zip，或下载 GitHub Release 中的 `adblocker-v2.9.70.zip`。
 
 ### 开发者模式加载
 
