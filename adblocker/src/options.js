@@ -1200,20 +1200,30 @@ function sendMessage(type, payload) {
 // ===== SW 保活（防止 MV3 冷启动延迟） =====
 // 页面打开时立即 ping 唤醒 SW，之后每 20 秒 ping 一次
 (function keepServiceWorkerAlive() {
+  let pingTimer = 0;
   const ping = () => {
     try {
       chrome.runtime.sendMessage({ type: "ping" }, () => {
-        // 忽略 lastError（SW 可能暂时无响应）
         void chrome.runtime.lastError;
       });
     } catch (e) {}
   };
-  ping();  // 立即
-  setInterval(ping, 20000);
-  // 页面可见性变化时也 ping（切回来时保活）
+  const start = () => {
+    if (pingTimer) return;
+    ping();
+    pingTimer = setInterval(ping, 20000);
+  };
+  const stop = () => {
+    if (pingTimer) { clearInterval(pingTimer); pingTimer = 0; }
+  };
+  start();
+  // 页面隐藏时暂停 ping（省电）
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") ping();
+    if (document.visibilityState === "visible") start();
+    else stop();
   });
+  // 页面关闭时清理（钉住页面/长时间打开的兜底）
+  window.addEventListener("pagehide", stop, { once: true });
 })();
 
 // ===== 订阅并发管理（多个订阅可同时拉取，全部完成后统一刷新 UI） =====
