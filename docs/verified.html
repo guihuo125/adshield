@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>邮箱验证成功 · AdShield</title>
+  <meta name="referrer" content="no-referrer" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #00aef0 0%, #0077cc 100%);
+      padding: 20px;
+      color: #333;
+    }
+    .card {
+      background: #fff;
+      border-radius: 20px;
+      padding: 48px 40px;
+      max-width: 440px;
+      width: 100%;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+      text-align: center;
+    }
+    .logo {
+      width: 72px; height: 72px;
+      margin: 0 auto 24px;
+      background: linear-gradient(135deg, #00aef0, #0077cc);
+      border-radius: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #fff;
+      font-size: 36px;
+      box-shadow: 0 8px 24px rgba(0,174,240,.35);
+    }
+    h1 {
+      font-size: 24px;
+      font-weight: 700;
+      margin-bottom: 12px;
+      color: #202225;
+      letter-spacing: -0.3px;
+    }
+    .subtitle {
+      font-size: 15px;
+      color: #636568;
+      line-height: 1.6;
+      margin-bottom: 28px;
+    }
+    .steps {
+      background: #f7f9fb;
+      border-radius: 12px;
+      padding: 18px 20px;
+      text-align: left;
+      margin-bottom: 24px;
+    }
+    .steps-title {
+      font-size: 13px;
+      font-weight: 600;
+      color: #202225;
+      margin-bottom: 10px;
+    }
+    .step {
+      display: flex;
+      align-items: flex-start;
+      gap: 10px;
+      font-size: 13.5px;
+      color: #3f4146;
+      line-height: 1.55;
+      padding: 4px 0;
+    }
+    .step-num {
+      width: 20px; height: 20px;
+      flex-shrink: 0;
+      background: #00aef0;
+      color: #fff;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+      margin-top: 1px;
+    }
+    .btn {
+      display: inline-block;
+      padding: 12px 32px;
+      background: #00aef0;
+      color: #fff;
+      text-decoration: none;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 14px;
+      border: none;
+      cursor: pointer;
+      transition: background .15s, transform .15s;
+      font-family: inherit;
+    }
+    .btn:hover {
+      background: #0077cc;
+      transform: translateY(-1px);
+    }
+    .check-icon {
+      display: inline-block;
+      width: 20px;
+      height: 20px;
+      vertical-align: middle;
+      margin-right: 6px;
+      color: #10b981;
+    }
+    .footer {
+      margin-top: 24px;
+      padding-top: 20px;
+      border-top: 1px solid #e5e7eb;
+      font-size: 12px;
+      color: #9ca3af;
+    }
+    .footer a {
+      color: #00aef0;
+      text-decoration: none;
+    }
+    @media (max-width: 480px) {
+      .card { padding: 36px 24px; }
+      h1 { font-size: 20px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">
+      <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        <polyline points="9 12 11 14 15 10"/>
+      </svg>
+    </div>
+    <h1><span class="check-icon">✓</span>邮箱验证成功</h1>
+    <p class="subtitle">您的 AdShield 账号已激活，现在可以登录使用了。</p>
+
+    <div class="steps">
+      <div class="steps-title">接下来的步骤：</div>
+      <div class="step">
+        <span class="step-num">1</span>
+        <span>关闭当前页面</span>
+      </div>
+      <div class="step">
+        <span class="step-num">2</span>
+        <span>回到浏览器，打开 <strong>AdShield 设置</strong></span>
+      </div>
+      <div class="step">
+        <span class="step-num">3</span>
+        <span>在「账号」页面登录您的邮箱和密码</span>
+      </div>
+    </div>
+
+    <button class="btn" onclick="tryClose()">我知道了，关闭此页面</button>
+
+    <div class="footer">
+      由 <a href="https://github.com/guihuo125/adshield" target="_blank">AdShield</a> 提供 · 开源广告拦截扩展
+    </div>
+  </div>
+
+  <script>
+    // 安全：立即清除 URL 里的 access_token（防止泄露到历史记录）
+    if (location.hash) {
+      history.replaceState(null, "", location.pathname);
+    }
+
+    function tryClose() {
+      // 尝试关闭（仅对 script 打开的窗口有效）
+      window.close();
+      // 如果失败，提示用户手动关闭
+      setTimeout(() => {
+        alert("请手动关闭此标签页，然后回到 AdShield 扩展登录。");
+      }, 100);
+    }
+  </script>
+</body>
+</html>

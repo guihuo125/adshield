@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AdShield 广告拦截器</title>
+  <meta name="referrer" content="no-referrer" />
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, #00aef0 0%, #0077cc 100%);
+      padding: 20px;
+      color: #333;
+    }
+    .card {
+      background: #fff;
+      border-radius: 20px;
+      padding: 48px 40px;
+      max-width: 480px;
+      width: 100%;
+      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+      text-align: center;
+    }
+    .logo {
+      width: 72px; height: 72px;
+      margin: 0 auto 20px;
+      background: linear-gradient(135deg, #00aef0, #0077cc);
+      border-radius: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 8px 24px rgba(0,174,240,.35);
+    }
+    h1 {
+      font-size: 24px;
+      font-weight: 700;
+      margin-bottom: 10px;
+      color: #202225;
+    }
+    .subtitle {
+      font-size: 14px;
+      color: #636568;
+      line-height: 1.65;
+      margin-bottom: 28px;
+    }
+    .btn {
+      display: inline-block;
+      padding: 12px 28px;
+      background: #00aef0;
+      color: #fff;
+      text-decoration: none;
+      border-radius: 10px;
+      font-weight: 600;
+      font-size: 14px;
+      margin: 6px 4px;
+      transition: background .15s, transform .15s;
+    }
+    .btn:hover {
+      background: #0077cc;
+      transform: translateY(-1px);
+    }
+    .btn-secondary {
+      background: transparent;
+      color: #00aef0;
+      border: 1.5px solid #00aef0;
+    }
+    .btn-secondary:hover {
+      background: #e7f6fe;
+    }
+    .footer {
+      margin-top: 28px;
+      padding-top: 20px;
+      border-top: 1px solid #e5e7eb;
+      font-size: 12px;
+      color: #9ca3af;
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="logo">
+      <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+        <polyline points="9 12 11 14 15 10"/>
+      </svg>
+    </div>
+    <h1>AdShield 广告拦截器</h1>
+    <p class="subtitle">
+      轻量、隐私优先的广告与追踪拦截扩展<br>
+      基于 Manifest V3 开发
+    </p>
+    <a class="btn" href="https://microsoftedge.microsoft.com/addons/detail/ogjodahjklhodkmnjhopkopflngicokg" target="_blank">从 Edge 商店安装</a>
+    <a class="btn btn-secondary" href="https://github.com/guihuo125/adshield" target="_blank">查看源码</a>
+    <div class="footer">
+      © 2026 AdShield · MIT License
+    </div>
+  </div>
+</body>
+</html>
