@@ -2505,6 +2505,7 @@ html[data-theme="dark"] .tech-icon-storage { background: rgba(190,24,93,.18); }
 .link-icon-export { background: #e8f5e9; color: #0b9209; }
 .link-icon-import { background: #e0f2ff; color: #0077cc; }
 .link-icon-store { background: #e0f2ff; color: #0078d4; }
+.link-icon-web { background: #e7f6fe; color: #00aef0; }
 
 html[data-theme="dark"] .link-icon-github { background: #3f4146; color: #e6e8ea; }
 html[data-theme="dark"] .link-icon-update { background: rgba(0,174,240,.15); }
