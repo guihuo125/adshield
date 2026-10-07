@@ -712,16 +712,38 @@
           tabAlive = false;
         }
 
-        // 检查 token
-        const store = await chrome.storage.local.get(TURNSTILE_KEY);
-        const item = store[TURNSTILE_KEY];
-        if (item && item.token && item.action === action) {
-          cleanup();
-          resolve(item.token);
-          return;
+        // 检查存储（兼容老方案）
+        try {
+          const store = await chrome.storage.local.get(TURNSTILE_KEY);
+          const item = store[TURNSTILE_KEY];
+          if (item && item.token && item.action === action) {
+            cleanup();
+            resolve(item.token);
+            return;
+          }
+        } catch (e) {}
+
+        // 用 chrome.scripting 读取 window.__adshield_token
+        if (tabAlive) {
+          try {
+            const results = await chrome.scripting.executeScript({
+              target: { tabId: tabId },
+              func: function () {
+                return window.__adshield_token || null;
+              }
+            });
+            const tokenData = results && results[0] && results[0].result;
+            if (tokenData && tokenData.token && tokenData.action === action) {
+              try { chrome.tabs.remove(tabId); } catch (e) {}
+              resolve(tokenData.token);
+              return;
+            }
+          } catch (e) {
+            // 忽略错误（页面还没加载完等）
+          }
         }
 
-        // tab 已关但没收到 token → 用户取消
+        // tab 已关但没拿到 token → 用户取消
         if (!tabAlive) {
           cleanup();
           reject(new Error("已取消验证"));

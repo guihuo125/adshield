@@ -8,7 +8,7 @@
 <script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-:root{--ink:#0a0a0a;--ink-2:#3f3f46;--ink-3:#71717a;--line:#e4e4e7;--line-2:#f4f4f5;--paper:#fafafa;--blue:#2563eb;--green:#16a34a;--red:#dc2626}
+:root{--ink:#0a0a0a;--ink-3:#71717a;--line:#e4e4e7;--blue:#2563eb}
 body{font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#f0f9ff 0%,#fff 100%);padding:24px;color:var(--ink);-webkit-font-smoothing:antialiased}
 .card{background:#fff;border:1px solid var(--line);border-radius:20px;padding:48px 40px;max-width:480px;width:100%;box-shadow:0 4px 12px rgba(0,0,0,.04),0 24px 60px rgba(0,0,0,.08);text-align:center;position:relative;overflow:hidden}
 .card::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#2563eb,#7c3aed,#16a34a)}
@@ -24,9 +24,6 @@ h1{font-size:22px;font-weight:700;letter-spacing:-.5px;margin-bottom:10px}
 .status.err::before{content:"✗ ";font-weight:700}
 .status.info::before{content:"⏳ "}
 .footer{margin-top:32px;padding-top:20px;border-top:1px solid var(--line);font-size:12px;color:var(--ink-3);line-height:1.6}
-.footer a{color:var(--blue);text-decoration:none}
-.loading{display:inline-block;width:16px;height:16px;border:2px solid var(--line);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite;vertical-align:middle;margin-right:6px}
-@keyframes spin{to{transform:rotate(360deg)}}
 </style>
 </head>
 <body>
@@ -44,67 +41,16 @@ h1{font-size:22px;font-weight:700;letter-spacing:-.5px;margin-bottom:10px}
 <script>
 (function(){
   var SITE_KEY = "0x4AAAAAAAFQCBXaTIYuaCUyx";
-  // 支持多个可能的扩展 ID（商店版 + 开发版）
-  var EXT_IDS = [
-    "gbkfkgfigndbbbdaiffebegiiddoikin",
-    "ogjodahjklhodkmnjhopkopflngicokg",
-    "gbmgbkgkihcdobchpbmhgldloafnnci"
-  ];
-  // 探测哪个扩展在线
-  var EXT_ID = null;
-  function detectExtension() {
-    return new Promise(function(resolve) {
-      var i = 0;
-      function tryNext() {
-        if (i >= EXT_IDS.length) { resolve(null); return; }
-        var id = EXT_IDS[i++];
-        try {
-          chrome.runtime.sendMessage(id, { type: "ping" }, function(resp) {
-            if (chrome.runtime.lastError || !resp || !resp.ok) {
-              tryNext();
-            } else {
-              console.log("[AdShield Verify] 找到扩展:", id, resp.version);
-              resolve(id);
-            }
-          });
-        } catch (e) {
-          tryNext();
-        }
-      }
-      tryNext();
-    });
-  }
-
-  // 从 URL 参数读取 action 和 email
   var params = new URLSearchParams(location.search);
   var action = params.get("action") || "generic";
   var email = params.get("email") || "";
-
   var statusEl = document.getElementById("status");
+
   function setStatus(text, type) {
     statusEl.textContent = text;
     statusEl.className = "status " + type;
   }
 
-  // 检查是否从扩展打开（chrome.runtime 可用）
-  var isFromExtension = typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage;
-  if (!isFromExtension) {
-    setStatus("请从 AdShield 扩展重新打开此页面", "err");
-    return;
-  }
-
-  // 先探测哪个扩展 ID 在线
-  detectExtension().then(function(foundId) {
-    if (!foundId) {
-      setStatus("未检测到 AdShield 扩展。请确保扩展已启用并重试。", "err");
-      return;
-    }
-    EXT_ID = foundId;
-    // 加载 Turnstile
-    loadWidget();
-  });
-
-  // 加载 Turnstile
   function loadWidget() {
     if (!window.turnstile) {
       setStatus("正在加载验证组件，请稍候...", "info");
@@ -128,28 +74,18 @@ h1{font-size:22px;font-weight:700;letter-spacing:-.5px;margin-bottom:10px}
   }
 
   function onSuccess(token) {
-    setStatus("验证成功，正在返回扩展...", "info");
-    try {
-      chrome.runtime.sendMessage(EXT_ID, {
-        type: "turnstileToken",
-        token: token,
-        action: action,
-        email: email
-      }, function(resp) {
-        if (chrome.runtime.lastError) {
-          setStatus("返回扩展失败: " + chrome.runtime.lastError.message, "err");
-          return;
-        }
-        if (resp && resp.ok) {
-          setStatus("验证成功！可以关闭此页面", "ok");
-          setTimeout(function() { window.close(); }, 800);
-        } else {
-          setStatus("验证失败: " + (resp && resp.error || "unknown"), "err");
-        }
-      });
-    } catch (e) {
-      setStatus("通信失败: " + e.message, "err");
-    }
+    // 把 token 存到 window 全局变量，扩展后台会来读
+    window.__adshield_token = {
+      token: token,
+      action: action,
+      email: email,
+      ts: Date.now()
+    };
+    // 也存到 document.title 便于检测（备用）
+    document.title = "✓ 验证成功 - AdShield";
+    setStatus("验证成功！请回到扩展继续。", "ok");
+    // 3 秒后自动关闭
+    setTimeout(function() { window.close(); }, 3000);
   }
 
   function onError(errCode) {
@@ -161,6 +97,11 @@ h1{font-size:22px;font-weight:700;letter-spacing:-.5px;margin-bottom:10px}
     try { window.turnstile.reset(); } catch (e) {}
   }
 
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", loadWidget);
+  } else {
+    loadWidget();
+  }
 })();
 </script>
 </body>
