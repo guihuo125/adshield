@@ -1198,35 +1198,61 @@
     return id;
   }
 
-  // 上报当前设备
-  async function reportDevice(token, userId) {
+  // 上报当前设备（带超时 + 静默重试）
+  async function reportDevice(token, userId, _retry) {
+    const retry = _retry || 0;
     try {
       const deviceId = await getDeviceId();
       const parsed = parseDevice(navigator.userAgent);
       const deviceName = parsed.label;
-      // Upsert：存在则更新 last_active
-      const resp = await fetch(SUPABASE_URL + "/rest/v1/adshield_devices?on_conflict=user_id,device_id", {
-        method: "POST",
-        headers: {
-          "apikey": SUPABASE_ANON_KEY,
-          "Authorization": "Bearer " + token,
-          "Content-Type": "application/json",
-          "Prefer": "resolution=merge-duplicates,return=minimal"
-        },
-        body: JSON.stringify({
-          user_id: userId,
-          device_id: deviceId,
-          device_name: deviceName,
-          user_agent: navigator.userAgent.slice(0, 200),
-          last_active: new Date().toISOString()
-        })
-      });
+
+      // 15 秒超时（避免 fetch 挂起）
+      const ctrl = new AbortController();
+      const timeout = setTimeout(() => ctrl.abort(), 15000);
+
+      let resp;
+      try {
+        // Upsert：存在则更新 last_active
+        resp = await fetch(SUPABASE_URL + "/rest/v1/adshield_devices?on_conflict=user_id,device_id", {
+          method: "POST",
+          signal: ctrl.signal,
+          headers: {
+            "apikey": SUPABASE_ANON_KEY,
+            "Authorization": "Bearer " + token,
+            "Content-Type": "application/json",
+            "Prefer": "resolution=merge-duplicates,return=minimal"
+          },
+          body: JSON.stringify({
+            user_id: userId,
+            device_id: deviceId,
+            device_name: deviceName,
+            user_agent: navigator.userAgent.slice(0, 200),
+            last_active: new Date().toISOString()
+          })
+        });
+      } finally {
+        clearTimeout(timeout);
+      }
+
       if (!resp.ok) {
         const err = await resp.text();
-        console.warn("[AdShield Device] 上报失败:", resp.status, err);
+        // 401/403 不重试（凭证问题）
+        if ((resp.status === 401 || resp.status === 403) || retry >= 3) {
+          console.warn("[AdShield Device] 上报失败:", resp.status, err);
+          return;
+        }
+        // 其它错误 → 延迟重试
+        throw new Error("HTTP " + resp.status);
       }
     } catch (e) {
-      console.warn("[AdShield Device] 上报异常:", e);
+      // 网络错误 → 静默重试（最多 3 次，指数退避）
+      if (retry < 3) {
+        const delay = 3000 * Math.pow(2, retry);   // 3s, 6s, 12s
+        setTimeout(() => { reportDevice(token, userId, retry + 1).catch(() => {}); }, delay);
+        return;
+      }
+      // 超过重试上限 → 只打一次简短日志
+      console.warn("[AdShield Device] 上报最终失败（已重试 3 次）");
     }
   }
 
