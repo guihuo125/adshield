@@ -17,8 +17,8 @@ body{font-family:var(--font-sans);font-size:16px;line-height:1.6;color:var(--ink
 html[data-theme="dark"]{
   --ink:#e6e6ea;
   --ink-2:#b8b9c0;
-  --ink-3:#82838c;
-  --ink-4:#5c5d66;
+  --ink-3:#9d9ea8;
+  --ink-4:#6b6c76;
   --line:#2c2c33;
   --line-2:#25252b;
   --paper:#1a1a1f;
@@ -31,7 +31,7 @@ html[data-theme="dark"] body{
 /* 导航 */
 html[data-theme="dark"] .nav.scrolled{background:rgba(24,24,28,.85);border-bottom-color:var(--line)}
 html[data-theme="dark"] .nav-inner{background:rgba(30,30,35,.8);border-color:rgba(255,255,255,.06);box-shadow:0 1px 2px rgba(0,0,0,.15),0 8px 32px rgba(0,0,0,.25)}
-html[data-theme="dark"] .nav-links a:hover{background:rgba(255,255,255,.05)}
+html[data-theme="dark"] .nav-links a:hover{background:rgba(255,255,255,.04);color:#f5f5f7}
 /* Hero 背景 */
 html[data-theme="dark"] .hero-bg::before{background:radial-gradient(ellipse at center,rgba(37,99,235,.22),rgba(124,58,237,.1) 40%,transparent 70%)}
 html[data-theme="dark"] .hero-bg::after{background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px)}
@@ -130,10 +130,12 @@ html[data-theme="dark"] .footer{
 html[data-theme="dark"] .footer a:hover{color:#60a5fa}
 /* 主题切换 */
 html[data-theme="dark"] .theme-switch{background:#25252b}
-html[data-theme="dark"] .theme-switch button.active{background:#3a3a42;color:#e6e6ea;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+html[data-theme="dark"] .theme-switch button{color:#9d9ea8}
+html[data-theme="dark"] .theme-switch button:hover{color:#e6e6ea}
+html[data-theme="dark"] .theme-switch button.active{background:#3a3a42;color:#f5f5f7;box-shadow:0 1px 3px rgba(0,0,0,.3)}
 /* 导航 CTA 保持白底 */
-html[data-theme="dark"] .nav-cta{background:#f5f5f7 !important;color:#111114 !important}
-html[data-theme="dark"] .nav-cta:hover{background:#fff !important}
+html[data-theme="dark"] .nav-cta{background:#f5f5f7 !important;color:#18181c !important;box-shadow:0 2px 8px rgba(0,0,0,.3)}
+html[data-theme="dark"] .nav-cta:hover{background:#fff !important;transform:translateY(-1px);box-shadow:0 4px 14px rgba(0,0,0,.4)}
 
 /* ========== 主题切换组件 ========== */
 .theme-switch{display:inline-flex;align-items:center;padding:3px;background:var(--line-2);border-radius:999px;gap:2px;margin-left:8px;transition:background .3s}
