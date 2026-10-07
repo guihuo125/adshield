@@ -9,14 +9,13 @@
 <link rel="icon" href="icons/icon32.png" />
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-:root{--ink:#0a0a0a;--ink-2:#3f3f46;--ink-3:#71717a;--ink-4:#a1a1aa;--line:#e4e4e7;--line-2:#f4f4f5;--paper:#fafafa;--accent:#2563eb;--accent-hover:#1d4ed8;--warm:#fef3c7;--font-sans:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;--font-serif:"Iowan Old Style","Apple Garamond",Baskerville,"Times New Roman",Georgia,serif;--font-mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace}
+:root{--ink:#0a0a0a;--ink-2:#3f3f46;--ink-3:#71717a;--ink-4:#a1a1aa;--line:#e4e4e7;--line-2:#f4f4f5;--paper:#fafafa;--blue:#2563eb;--blue-2:#1d4ed8;--green:#16a34a;--violet:#7c3aed;--amber:#d97706;--rose:#e11d48;--cyan:#0891b2;--font-sans:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;--font-serif:"Iowan Old Style","Apple Garamond",Baskerville,"Times New Roman",Georgia,serif;--font-mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace}
 html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
 body{font-family:var(--font-sans);font-size:16px;line-height:1.6;color:var(--ink);background:#fff;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;overflow-x:hidden}
 a{color:inherit;text-decoration:none}
 img{max-width:100%;display:block}
 code{font-family:var(--font-mono);font-size:.88em;padding:1px 6px;background:var(--line-2);border-radius:4px;color:var(--ink-2)}
-::selection{background:var(--ink);color:#fff}
-.wrap{max-width:1080px;margin:0 auto;padding:0 32px}
+::selection{background:var(--blue);color:#fff}
 
 /* Nav */
 .nav{position:fixed;top:0;left:0;right:0;z-index:100;transition:background .3s,border-color .3s}
@@ -24,7 +23,7 @@ code{font-family:var(--font-mono);font-size:.88em;padding:1px 6px;background:var
 .nav-in{max-width:1080px;margin:0 auto;padding:20px 32px;display:flex;align-items:center;gap:16px;font-size:14px}
 .nav-logo{width:26px;height:26px;flex-shrink:0}
 .nav-brand{font-weight:600;letter-spacing:-.01em}
-.nav-tag{font-size:11px;color:var(--ink-3);padding:2px 8px;border:1px solid var(--line);border-radius:100px;margin-left:2px}
+.nav-tag{font-size:11px;color:var(--blue);padding:2px 8px;background:#eff6ff;border-radius:100px;margin-left:2px;font-weight:500}
 .nav-links{margin-left:auto;display:flex;gap:4px;align-items:center}
 .nav-links a{padding:8px 14px;border-radius:6px;color:var(--ink-2);transition:color .15s,background .15s}
 .nav-links a:hover{color:var(--ink);background:var(--line-2)}
@@ -35,42 +34,57 @@ code{font-family:var(--font-mono);font-size:.88em;padding:1px 6px;background:var
 .hero{padding:180px 32px 120px;max-width:1080px;margin:0 auto;position:relative}
 .hero-meta{display:flex;align-items:center;gap:12px;font-size:12.5px;color:var(--ink-3);letter-spacing:.02em;margin-bottom:32px;font-weight:500}
 .hero-meta .line{width:24px;height:1px;background:var(--ink-4)}
-.hero-meta .dot{width:5px;height:5px;border-radius:50%;background:#16a34a}
-.hero h1{font-family:var(--font-sans);font-weight:600;font-size:clamp(40px,6vw,72px);line-height:1.02;letter-spacing:-.035em;color:var(--ink);max-width:16ch}
-.hero h1 em{font-family:var(--font-serif);font-style:italic;font-weight:400;color:var(--ink-3);letter-spacing:-.02em}
+.hero-meta .dot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 0 3px rgba(22,163,74,.15)}
+.hero h1{font-weight:600;font-size:clamp(40px,6vw,72px);line-height:1.02;letter-spacing:-.035em;color:var(--ink);max-width:16ch}
+.hero h1 em{font-family:var(--font-serif);font-style:italic;font-weight:400;color:transparent;background:linear-gradient(135deg,#2563eb 0%,#7c3aed 55%,#16a34a 100%);-webkit-background-clip:text;background-clip:text;letter-spacing:-.02em}
 .hero-lead{margin-top:36px;font-size:clamp(16px,1.6vw,18px);line-height:1.75;color:var(--ink-2);max-width:52ch;font-weight:400}
+.hero-lead strong{color:var(--ink);font-weight:600}
 .hero-cta{margin-top:48px;display:flex;gap:12px;flex-wrap:wrap;align-items:center}
 .hero-foot{margin-top:80px;display:flex;gap:56px;flex-wrap:wrap;padding-top:32px;border-top:1px solid var(--line)}
 .hero-foot-item{display:flex;flex-direction:column;gap:4px}
 .hero-foot-num{font-size:24px;font-weight:600;letter-spacing:-.02em;color:var(--ink);font-variant-numeric:tabular-nums}
+.hero-foot-num.c1{color:var(--blue)}
+.hero-foot-num.c2{color:var(--violet)}
+.hero-foot-num.c3{color:var(--green)}
+.hero-foot-num.c4{color:var(--amber)}
 .hero-foot-lbl{font-size:12.5px;color:var(--ink-3);letter-spacing:.01em}
 
 /* Buttons */
 .btn{display:inline-flex;align-items:center;gap:8px;padding:12px 22px;border-radius:8px;font-size:14.5px;font-weight:500;font-family:inherit;cursor:pointer;transition:all .18s cubic-bezier(.2,.7,.3,1);border:1px solid transparent;white-space:nowrap}
-.btn-primary{background:var(--ink);color:#fff}
-.btn-primary:hover{background:#000;transform:translateY(-1px)}
+.btn-primary{background:var(--blue);color:#fff;box-shadow:0 1px 2px rgba(37,99,235,.2),0 4px 12px -2px rgba(37,99,235,.3)}
+.btn-primary:hover{background:var(--blue-2);transform:translateY(-1px);box-shadow:0 2px 4px rgba(37,99,235,.25),0 8px 20px -4px rgba(37,99,235,.35)}
 .btn-primary:active{transform:translateY(0)}
+.btn-dark{background:var(--ink);color:#fff}
+.btn-dark:hover{background:#000;transform:translateY(-1px)}
 .btn-ghost{background:transparent;color:var(--ink);border-color:var(--line)}
 .btn-ghost:hover{border-color:var(--ink);background:var(--line-2)}
 .btn svg{transition:transform .2s}
 .btn:hover svg{transform:translate(2px,-2px)}
 .btn-link{color:var(--ink-2);padding:12px 6px;text-decoration:underline;text-underline-offset:4px;text-decoration-thickness:1px;text-decoration-color:var(--ink-4);transition:color .15s,text-decoration-color .15s}
-.btn-link:hover{color:var(--ink);text-decoration-color:var(--ink)}
+.btn-link:hover{color:var(--blue);text-decoration-color:var(--blue)}
 
 /* Section */
 .section{padding:120px 32px}
 .section-in{max-width:1080px;margin:0 auto}
 .sec-head{max-width:640px;margin-bottom:64px}
-.sec-num{font-family:var(--font-mono);font-size:12px;color:var(--ink-4);letter-spacing:.08em;margin-bottom:20px;font-weight:500}
+.sec-num{font-family:var(--font-mono);font-size:12px;letter-spacing:.08em;margin-bottom:20px;font-weight:500;color:var(--blue);display:inline-flex;align-items:center;gap:8px}
+.sec-num::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--blue)}
 .sec-h{font-weight:600;font-size:clamp(28px,3.4vw,40px);line-height:1.12;letter-spacing:-.03em;color:var(--ink);margin-bottom:16px}
-.sec-h em{font-family:var(--font-serif);font-style:italic;font-weight:400;color:var(--ink-3)}
+.sec-h em{font-family:var(--font-serif);font-style:italic;font-weight:400;color:transparent;background:linear-gradient(135deg,#2563eb,#7c3aed);-webkit-background-clip:text;background-clip:text;letter-spacing:-.02em}
 .sec-p{font-size:16.5px;line-height:1.7;color:var(--ink-3);max-width:52ch}
 
 /* Feature grid */
 .feat{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:1px;background:var(--line);border:1px solid var(--line);border-radius:2px;overflow:hidden}
 .feat-item{background:#fff;padding:32px 28px;transition:background .2s;position:relative}
 .feat-item:hover{background:var(--paper)}
-.feat-num{font-family:var(--font-mono);font-size:11.5px;color:var(--ink-4);letter-spacing:.05em;margin-bottom:20px;font-weight:500}
+.feat-num{font-family:var(--font-mono);font-size:11.5px;letter-spacing:.05em;margin-bottom:20px;font-weight:500;display:inline-flex;align-items:center;gap:8px}
+.feat-dot{width:8px;height:8px;border-radius:50%;background:currentColor;box-shadow:0 0 0 4px currentColor;opacity:.35}
+.feat-item:nth-child(6n+1) .feat-num{color:#dc2626}
+.feat-item:nth-child(6n+2) .feat-num{color:#7c3aed}
+.feat-item:nth-child(6n+3) .feat-num{color:#0891b2}
+.feat-item:nth-child(6n+4) .feat-num{color:#2563eb}
+.feat-item:nth-child(6n+5) .feat-num{color:#d97706}
+.feat-item:nth-child(6n+6) .feat-num{color:#16a34a}
 .feat-title{font-size:16px;font-weight:600;letter-spacing:-.01em;margin-bottom:8px;color:var(--ink)}
 .feat-desc{font-size:14px;line-height:1.65;color:var(--ink-3)}
 
@@ -80,33 +94,34 @@ code{font-family:var(--font-mono);font-size:.88em;padding:1px 6px;background:var
 .shot:hover{border-color:var(--ink-4)}
 .shot img{width:100%;display:block}
 .shot-cap{padding:14px 4px 0;font-size:13px;color:var(--ink-3);display:flex;align-items:center;gap:8px}
-.shot-cap::before{content:"";width:16px;height:1px;background:var(--ink-4)}
+.shot-cap::before{content:"";width:16px;height:1px;background:var(--blue)}
 
 /* Install */
 .install{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:24px}
 .inst{border:1px solid var(--line);border-radius:2px;padding:36px 32px;background:#fff;transition:border-color .2s}
 .inst:hover{border-color:var(--ink-4)}
 .inst-h{display:flex;align-items:center;gap:12px;margin-bottom:24px}
-.inst-h .num{font-family:var(--font-mono);font-size:11px;color:var(--ink-3);border:1px solid var(--line);padding:3px 8px;border-radius:100px}
+.inst-h .num{font-family:var(--font-mono);font-size:11px;color:#fff;background:var(--ink);padding:3px 9px;border-radius:100px;font-weight:600}
 .inst-h h3{font-size:17px;font-weight:600;letter-spacing:-.01em}
 .inst ol{list-style:none;counter-reset:s;margin:0 0 24px;padding:0}
 .inst ol li{counter-increment:s;position:relative;padding:8px 0 8px 28px;font-size:14.5px;line-height:1.6;color:var(--ink-2)}
-.inst ol li::before{content:counter(s) ".";position:absolute;left:0;top:8px;font-family:var(--font-mono);font-size:12.5px;color:var(--ink-4);font-weight:500}
-.inst-badge{display:inline-block;padding:2px 10px;font-size:11px;font-weight:600;letter-spacing:.02em;background:var(--warm);color:#78350f;border-radius:100px;margin-left:8px;vertical-align:middle}
+.inst ol li::before{content:counter(s) ".";position:absolute;left:0;top:8px;font-family:var(--font-mono);font-size:12.5px;color:var(--blue);font-weight:600}
+.inst-badge{display:inline-block;padding:2px 10px;font-size:11px;font-weight:600;letter-spacing:.02em;background:#dbeafe;color:#1e40af;border-radius:100px;margin-left:8px;vertical-align:middle}
 
 /* Privacy */
-.priv{max-width:760px;border-top:1px solid var(--ink);padding-top:48px}
+.priv{max-width:760px;border-top:2px solid var(--ink);padding-top:48px;position:relative}
+.priv::before{content:"";position:absolute;top:-2px;left:0;width:80px;height:2px;background:var(--blue)}
 .priv-list{list-style:none;padding:0;margin:0;display:grid;grid-template-columns:1fr 1fr;gap:24px 48px}
 .priv-list li{padding-left:24px;position:relative;font-size:15px;line-height:1.65;color:var(--ink-2)}
-.priv-list li::before{content:"—";position:absolute;left:0;color:var(--ink-4);font-family:var(--font-mono)}
+.priv-list li::before{content:"—";position:absolute;left:0;color:var(--green);font-family:var(--font-mono)}
 .priv-link{margin-top:48px;padding-top:32px;border-top:1px solid var(--line)}
 
 /* Quote */
-.quote{padding:120px 32px;text-align:center}
+.quote{padding:120px 32px;text-align:center;background:linear-gradient(180deg,#fff 0%,#fafbff 100%)}
 .quote-in{max-width:760px;margin:0 auto}
 .quote blockquote{font-family:var(--font-serif);font-style:italic;font-size:clamp(24px,3vw,36px);line-height:1.35;letter-spacing:-.02em;color:var(--ink);font-weight:400}
-.quote blockquote::before{content:"“";font-size:1.4em;line-height:0;vertical-align:-.3em;color:var(--ink-4);margin-right:.05em}
-.quote blockquote::after{content:"”";font-size:1.4em;line-height:0;vertical-align:-.3em;color:var(--ink-4);margin-left:.05em}
+.quote blockquote::before{content:"“";font-size:1.4em;line-height:0;vertical-align:-.3em;color:var(--blue);margin-right:.05em}
+.quote blockquote::after{content:"”";font-size:1.4em;line-height:0;vertical-align:-.3em;color:var(--violet);margin-left:.05em}
 .quote cite{display:block;margin-top:32px;font-family:var(--font-sans);font-style:normal;font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);font-weight:500}
 
 /* Footer */
@@ -117,7 +132,7 @@ code{font-family:var(--font-mono);font-size:.88em;padding:1px 6px;background:var
 .footer-p{font-size:13.5px;color:var(--ink-3);line-height:1.7;max-width:34ch}
 .footer h4{font-family:var(--font-mono);font-size:11.5px;color:var(--ink-4);letter-spacing:.08em;text-transform:uppercase;margin-bottom:20px;font-weight:500}
 .footer-links a{display:block;font-size:14px;color:var(--ink-2);padding:6px 0;transition:color .15s}
-.footer-links a:hover{color:var(--ink)}
+.footer-links a:hover{color:var(--blue)}
 .footer-bottom{max-width:1080px;margin:64px auto 0;padding-top:32px;border-top:1px solid var(--line);display:flex;justify-content:space-between;align-items:center;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--ink-4);font-family:var(--font-mono);letter-spacing:.02em}
 
 /* Reveal */
@@ -125,7 +140,6 @@ code{font-family:var(--font-mono);font-size:.88em;padding:1px 6px;background:var
 .r.in{opacity:1;transform:translateY(0)}
 .r.d1{transition-delay:.06s}.r.d2{transition-delay:.12s}.r.d3{transition-delay:.18s}.r.d4{transition-delay:.24s}
 
-/* Responsive */
 @media(max-width:720px){
 .nav-in{padding:16px 20px}
 .nav-links a:not(.nav-cta){display:none}
@@ -144,7 +158,7 @@ code{font-family:var(--font-mono);font-size:.88em;padding:1px 6px;background:var
 
 <nav class="nav" id="nav">
 <div class="nav-in">
-<svg class="nav-logo" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2 20 5v7c0 5-4 8.5-8 10-4-1.5-8-5-8-10V5z" fill="#0a0a0a"/><polyline points="8,12 11,15 16,9" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+<svg class="nav-logo" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 2 20 5v7c0 5-4 8.5-8 10-4-1.5-8-5-8-10V5z" fill="url(#navGrad)"/><polyline points="8,12 11,15 16,9" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/><defs><linearGradient id="navGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2563eb"/><stop offset="1" stop-color="#16a34a"/></linearGradient></defs></svg>
 <span class="nav-brand">AdShield</span>
 <span class="nav-tag">v2.9.76</span>
 <div class="nav-links">
@@ -165,16 +179,16 @@ code{font-family:var(--font-mono);font-size:.88em;padding:1px 6px;background:var
 <span>MIT · 开源</span>
 </div>
 <h1 class="r in d1">更安静的<br>浏览体验，<em>只留你想看的。</em></h1>
-<p class="hero-lead r in d2">AdShield 是一款轻量、隐私优先的广告与追踪拦截器。基于 Manifest V3 的原生网络层拦截，速度更快、开销更低。所有数据本地存储——<strong style="color:var(--ink)">不上传任何信息。</strong></p>
+<p class="hero-lead r in d2">AdShield 是一款轻量、隐私优先的广告与追踪拦截器。基于 Manifest V3 的原生网络层拦截，速度更快、开销更低。所有数据本地存储——<strong>不上传任何信息。</strong></p>
 <div class="hero-cta r in d3">
 <a class="btn btn-primary" href="https://microsoftedge.microsoft.com/addons/detail/ogjodahjklhodkmnjhopkopflngicokg" target="_blank">前往 Edge 商店<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/></svg></a>
 <a class="btn btn-link" href="https://github.com/guihuo125/adshield" target="_blank">或从 GitHub 查看源码</a>
 </div>
 <div class="hero-foot r in d4">
-<div class="hero-foot-item"><span class="hero-foot-num">2,257</span><span class="hero-foot-lbl">DNR 拦截规则</span></div>
-<div class="hero-foot-item"><span class="hero-foot-num">5</span><span class="hero-foot-lbl">独立拦截分类</span></div>
-<div class="hero-foot-item"><span class="hero-foot-num">0 KB</span><span class="hero-foot-lbl">上传到服务器</span></div>
-<div class="hero-foot-item"><span class="hero-foot-num">40+</span><span class="hero-foot-lbl">主流站点适配</span></div>
+<div class="hero-foot-item"><span class="hero-foot-num c1">2,257</span><span class="hero-foot-lbl">DNR 拦截规则</span></div>
+<div class="hero-foot-item"><span class="hero-foot-num c2">5</span><span class="hero-foot-lbl">独立拦截分类</span></div>
+<div class="hero-foot-item"><span class="hero-foot-num c3">0 KB</span><span class="hero-foot-lbl">上传到服务器</span></div>
+<div class="hero-foot-item"><span class="hero-foot-num c4">40+</span><span class="hero-foot-lbl">主流站点适配</span></div>
 </div>
 </section>
 
@@ -186,15 +200,15 @@ code{font-family:var(--font-mono);font-size:.88em;padding:1px 6px;background:var
 <p class="sec-p r d2">AdShield 覆盖浏览器里绝大多数「噪音」——横幅、追踪器、埋点、弹窗、跳转参数，以及悄悄运行的挖矿脚本。</p>
 </div>
 <div class="feat r d3">
-<div class="feat-item"><div class="feat-num">01</div><div class="feat-title">广告拦截</div><div class="feat-desc">横幅、弹窗、视频贴片、信息流，覆盖主流广告网络。</div></div>
-<div class="feat-item"><div class="feat-num">02</div><div class="feat-title">追踪防护</div><div class="feat-desc">阻断第三方跨站追踪器，浏览行为不外泄。</div></div>
-<div class="feat-item"><div class="feat-num">03</div><div class="feat-title">URL 清理</div><div class="feat-desc">自动去除 utm_*、gclid、fbclid 等追踪参数。</div></div>
-<div class="feat-item"><div class="feat-num">04</div><div class="feat-title">元素隐藏</div><div class="feat-desc">隐藏广告容器，让版面重新干净。支持自定义选择器。</div></div>
-<div class="feat-item"><div class="feat-num">05</div><div class="feat-title">反拦截检测</div><div class="feat-desc">规避站点检测脚本，不再被「请关闭广告拦截」打扰。</div></div>
-<div class="feat-item"><div class="feat-num">06</div><div class="feat-title">恶意防护</div><div class="feat-desc">拦截挖矿脚本与已知的恶意、欺诈分发域名。</div></div>
-<div class="feat-item"><div class="feat-num">07</div><div class="feat-title">规则订阅</div><div class="feat-desc">订阅 EasyList China / AdGuard / EasyPrivacy 等主流规则源。</div></div>
-<div class="feat-item"><div class="feat-num">08</div><div class="feat-title">云同步</div><div class="feat-desc">可选账号：跨设备同步配置、白名单、自定义规则。</div></div>
-<div class="feat-item"><div class="feat-num">09</div><div class="feat-title">账号安全</div><div class="feat-desc">密码强度策略、登录失败锁定、多设备管理。</div></div>
+<div class="feat-item"><div class="feat-num"><span class="feat-dot"></span>01</div><div class="feat-title">广告拦截</div><div class="feat-desc">横幅、弹窗、视频贴片、信息流，覆盖主流广告网络。</div></div>
+<div class="feat-item"><div class="feat-num"><span class="feat-dot"></span>02</div><div class="feat-title">追踪防护</div><div class="feat-desc">阻断第三方跨站追踪器，浏览行为不外泄。</div></div>
+<div class="feat-item"><div class="feat-num"><span class="feat-dot"></span>03</div><div class="feat-title">URL 清理</div><div class="feat-desc">自动去除 utm_*、gclid、fbclid 等追踪参数。</div></div>
+<div class="feat-item"><div class="feat-num"><span class="feat-dot"></span>04</div><div class="feat-title">元素隐藏</div><div class="feat-desc">隐藏广告容器，让版面重新干净。支持自定义选择器。</div></div>
+<div class="feat-item"><div class="feat-num"><span class="feat-dot"></span>05</div><div class="feat-title">反拦截检测</div><div class="feat-desc">规避站点检测脚本，不再被「请关闭广告拦截」打扰。</div></div>
+<div class="feat-item"><div class="feat-num"><span class="feat-dot"></span>06</div><div class="feat-title">恶意防护</div><div class="feat-desc">拦截挖矿脚本与已知的恶意、欺诈分发域名。</div></div>
+<div class="feat-item"><div class="feat-num"><span class="feat-dot"></span>07</div><div class="feat-title">规则订阅</div><div class="feat-desc">订阅 EasyList China / AdGuard / EasyPrivacy 等主流规则源。</div></div>
+<div class="feat-item"><div class="feat-num"><span class="feat-dot"></span>08</div><div class="feat-title">云同步</div><div class="feat-desc">可选账号：跨设备同步配置、白名单、自定义规则。</div></div>
+<div class="feat-item"><div class="feat-num"><span class="feat-dot"></span>09</div><div class="feat-title">账号安全</div><div class="feat-desc">密码强度策略、登录失败锁定、多设备管理。</div></div>
 </div>
 </div>
 </section>
@@ -278,7 +292,7 @@ code{font-family:var(--font-mono);font-size:.88em;padding:1px 6px;background:var
 <div class="footer-in">
 <div>
 <div class="footer-brand">
-<svg viewBox="0 0 24 24" fill="none"><path d="M12 2 20 5v7c0 5-4 8.5-8 10-4-1.5-8-5-8-10V5z" fill="#0a0a0a"/><polyline points="8,12 11,15 16,9" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/></svg>
+<svg viewBox="0 0 24 24" fill="none"><path d="M12 2 20 5v7c0 5-4 8.5-8 10-4-1.5-8-5-8-10V5z" fill="url(#footGrad)"/><polyline points="8,12 11,15 16,9" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" fill="none"/><defs><linearGradient id="footGrad" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#2563eb"/><stop offset="1" stop-color="#16a34a"/></linearGradient></defs></svg>
 AdShield
 </div>
 <p class="footer-p">轻量、隐私优先的广告与追踪拦截器。基于 Manifest V3 开发，开源免费。</p>
