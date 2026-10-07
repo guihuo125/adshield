@@ -3,102 +3,536 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>AdShield 广告拦截器</title>
+  <title>AdShield 广告拦截器 — 轻量、隐私优先</title>
+  <meta name="description" content="AdShield 是一款轻量、隐私优先的广告与追踪拦截扩展。支持规则订阅、云同步、多设备管理，基于 Manifest V3 开发。" />
   <meta name="referrer" content="no-referrer" />
+  <link rel="icon" href="icons/icon32.png" />
   <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --brand-500: #00aef0;
+      --brand-600: #0077cc;
+      --brand-700: #005a9e;
+      --text-900: #0d1117;
+      --text-700: #374151;
+      --text-500: #6b7280;
+      --text-400: #9ca3af;
+      --bg-50: #f9fafb;
+      --bg-100: #f3f4f6;
+      --border: #e5e7eb;
+      --radius: 14px;
+      --radius-lg: 20px;
+    }
+    html { scroll-behavior: smooth; }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif;
-      min-height: 100vh;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      background: linear-gradient(135deg, #00aef0 0%, #0077cc 100%);
-      padding: 20px;
-      color: #333;
-    }
-    .card {
-      background: #fff;
-      border-radius: 20px;
-      padding: 48px 40px;
-      max-width: 480px;
-      width: 100%;
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
-      text-align: center;
-    }
-    .logo {
-      width: 72px; height: 72px;
-      margin: 0 auto 20px;
-      background: linear-gradient(135deg, #00aef0, #0077cc);
-      border-radius: 20px;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      box-shadow: 0 8px 24px rgba(0,174,240,.35);
-    }
-    h1 {
-      font-size: 24px;
-      font-weight: 700;
-      margin-bottom: 10px;
-      color: #202225;
-    }
-    .subtitle {
-      font-size: 14px;
-      color: #636568;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+      color: var(--text-900);
+      background: #ffffff;
       line-height: 1.65;
-      margin-bottom: 28px;
+      -webkit-font-smoothing: antialiased;
+    }
+    a { color: inherit; text-decoration: none; }
+    img { max-width: 100%; display: block; }
+
+    /* ===== Nav ===== */
+    .nav {
+      position: sticky;
+      top: 0;
+      z-index: 100;
+      background: rgba(255,255,255,.85);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+      border-bottom: 1px solid var(--border);
+    }
+    .nav-inner {
+      max-width: 1080px;
+      margin: 0 auto;
+      padding: 14px 24px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+    .nav-logo {
+      width: 32px; height: 32px;
+      border-radius: 8px;
+    }
+    .nav-name {
+      font-size: 16px;
+      font-weight: 700;
+      letter-spacing: -0.2px;
+    }
+    .nav-links {
+      margin-left: auto;
+      display: flex;
+      gap: 24px;
+      font-size: 14px;
+      color: var(--text-700);
+    }
+    .nav-links a { transition: color .15s; }
+    .nav-links a:hover { color: var(--brand-600); }
+
+    /* ===== Hero ===== */
+    .hero {
+      padding: 88px 24px 72px;
+      text-align: center;
+      background: linear-gradient(180deg, #f0f9ff 0%, #ffffff 100%);
+      position: relative;
+      overflow: hidden;
+    }
+    .hero::before {
+      content: '';
+      position: absolute;
+      top: -300px;
+      left: 50%;
+      transform: translateX(-50%);
+      width: 900px;
+      height: 700px;
+      background: radial-gradient(ellipse, rgba(0,174,240,.1), transparent 70%);
+      pointer-events: none;
+    }
+    .hero-inner { position: relative; max-width: 780px; margin: 0 auto; }
+    .hero-logo {
+      width: 96px; height: 96px;
+      margin: 0 auto 24px;
+      border-radius: 22px;
+      box-shadow: 0 12px 32px rgba(0,174,240,.25);
+      animation: float 6s ease-in-out infinite;
+    }
+    @keyframes float {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-8px); }
+    }
+    .hero-title {
+      font-size: 44px;
+      font-weight: 800;
+      letter-spacing: -1px;
+      line-height: 1.15;
+      margin-bottom: 16px;
+      background: linear-gradient(135deg, #0d1117 0%, #374151 100%);
+      -webkit-background-clip: text;
+      background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .hero-sub {
+      font-size: 18px;
+      color: var(--text-500);
+      max-width: 560px;
+      margin: 0 auto 36px;
+      line-height: 1.65;
+    }
+    .hero-actions {
+      display: flex;
+      gap: 12px;
+      justify-content: center;
+      flex-wrap: wrap;
     }
     .btn {
-      display: inline-block;
-      padding: 12px 28px;
-      background: #00aef0;
-      color: #fff;
-      text-decoration: none;
-      border-radius: 10px;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 14px 28px;
+      border-radius: 12px;
       font-weight: 600;
-      font-size: 14px;
-      margin: 6px 4px;
-      transition: background .15s, transform .15s;
+      font-size: 15px;
+      font-family: inherit;
+      border: none;
+      cursor: pointer;
+      transition: all .18s cubic-bezier(0.34, 1.56, 0.64, 1);
     }
-    .btn:hover {
-      background: #0077cc;
-      transform: translateY(-1px);
+    .btn-primary {
+      background: linear-gradient(135deg, var(--brand-500), var(--brand-600));
+      color: #fff;
+      box-shadow: 0 6px 20px rgba(0,174,240,.35);
+    }
+    .btn-primary:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 28px rgba(0,174,240,.45);
     }
     .btn-secondary {
-      background: transparent;
-      color: #00aef0;
-      border: 1.5px solid #00aef0;
+      background: #fff;
+      color: var(--text-900);
+      border: 1.5px solid var(--border);
     }
     .btn-secondary:hover {
-      background: #e7f6fe;
+      border-color: var(--brand-500);
+      color: var(--brand-600);
+      transform: translateY(-2px);
     }
+    .hero-meta {
+      margin-top: 20px;
+      font-size: 13px;
+      color: var(--text-400);
+    }
+
+    /* ===== Section ===== */
+    .section {
+      padding: 72px 24px;
+    }
+    .section-inner {
+      max-width: 1080px;
+      margin: 0 auto;
+    }
+    .section-title {
+      font-size: 32px;
+      font-weight: 800;
+      letter-spacing: -0.5px;
+      text-align: center;
+      margin-bottom: 12px;
+    }
+    .section-sub {
+      font-size: 16px;
+      color: var(--text-500);
+      text-align: center;
+      max-width: 560px;
+      margin: 0 auto 48px;
+    }
+
+    /* ===== Features ===== */
+    .features {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 16px;
+    }
+    .feature {
+      padding: 24px;
+      border-radius: var(--radius);
+      background: var(--bg-50);
+      border: 1px solid var(--border);
+      transition: all .2s;
+    }
+    .feature:hover {
+      transform: translateY(-3px);
+      border-color: var(--brand-500);
+      box-shadow: 0 8px 24px rgba(0,174,240,.1);
+    }
+    .feature-icon {
+      width: 40px; height: 40px;
+      border-radius: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-bottom: 14px;
+      font-size: 20px;
+    }
+    .feature-title {
+      font-size: 16px;
+      font-weight: 700;
+      margin-bottom: 6px;
+    }
+    .feature-desc {
+      font-size: 14px;
+      color: var(--text-500);
+      line-height: 1.6;
+    }
+
+    /* ===== Screenshots ===== */
+    .screenshots {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 20px;
+    }
+    .shot {
+      border-radius: var(--radius);
+      overflow: hidden;
+      border: 1px solid var(--border);
+      box-shadow: 0 4px 16px rgba(0,0,0,.06);
+      transition: all .25s;
+      background: var(--bg-50);
+    }
+    .shot:hover {
+      transform: translateY(-4px);
+      box-shadow: 0 12px 32px rgba(0,0,0,.12);
+    }
+    .shot img { width: 100%; display: block; }
+
+    /* ===== Install ===== */
+    .install-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+      gap: 20px;
+    }
+    .install-card {
+      padding: 28px;
+      border-radius: var(--radius-lg);
+      background: linear-gradient(135deg, #f0f9ff, #ffffff);
+      border: 1px solid #cce9f9;
+    }
+    .install-card h3 {
+      font-size: 20px;
+      font-weight: 700;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .install-card ol {
+      padding-left: 20px;
+      color: var(--text-700);
+      font-size: 14.5px;
+      line-height: 1.85;
+    }
+    .install-card li { margin-bottom: 4px; }
+    .badge-rec {
+      display: inline-block;
+      padding: 2px 10px;
+      background: var(--brand-500);
+      color: #fff;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 700;
+      margin-left: 6px;
+      vertical-align: middle;
+    }
+
+    /* ===== Privacy ===== */
+    .privacy-box {
+      max-width: 720px;
+      margin: 0 auto;
+      padding: 32px;
+      border-radius: var(--radius-lg);
+      background: var(--bg-50);
+      border: 1px solid var(--border);
+    }
+    .privacy-box ul {
+      list-style: none;
+      padding: 0;
+    }
+    .privacy-box li {
+      display: flex;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 10px 0;
+      font-size: 15px;
+      color: var(--text-700);
+    }
+    .privacy-box li::before {
+      content: "✓";
+      flex-shrink: 0;
+      width: 22px; height: 22px;
+      background: #d1fae5;
+      color: #059669;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-weight: 700;
+      font-size: 13px;
+    }
+
+    /* ===== Footer ===== */
     .footer {
-      margin-top: 28px;
-      padding-top: 20px;
-      border-top: 1px solid #e5e7eb;
-      font-size: 12px;
-      color: #9ca3af;
+      padding: 48px 24px 32px;
+      border-top: 1px solid var(--border);
+      background: var(--bg-50);
+    }
+    .footer-inner {
+      max-width: 1080px;
+      margin: 0 auto;
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      font-size: 13.5px;
+      color: var(--text-500);
+    }
+    .footer-links {
+      display: flex;
+      gap: 20px;
+      flex-wrap: wrap;
+    }
+    .footer a { transition: color .15s; }
+    .footer a:hover { color: var(--brand-600); }
+
+    /* ===== Responsive ===== */
+    @media (max-width: 640px) {
+      .hero { padding: 56px 20px 48px; }
+      .hero-title { font-size: 32px; }
+      .hero-sub { font-size: 16px; }
+      .section { padding: 56px 20px; }
+      .section-title { font-size: 26px; }
+      .nav-links { display: none; }
+      .btn { padding: 12px 20px; font-size: 14px; }
     }
   </style>
 </head>
 <body>
-  <div class="card">
-    <div class="logo">
-      <svg viewBox="0 0 24 24" width="40" height="40" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-        <polyline points="9 12 11 14 15 10"/>
-      </svg>
+
+  <!-- 顶部导航 -->
+  <nav class="nav">
+    <div class="nav-inner">
+      <img src="icons/icon32.png" class="nav-logo" alt="AdShield" />
+      <span class="nav-name">AdShield</span>
+      <div class="nav-links">
+        <a href="#features">功能</a>
+        <a href="#screenshots">截图</a>
+        <a href="#install">安装</a>
+        <a href="#privacy">隐私</a>
+        <a href="https://github.com/guihuo125/adshield" target="_blank">GitHub</a>
+      </div>
     </div>
-    <h1>AdShield 广告拦截器</h1>
-    <p class="subtitle">
-      轻量、隐私优先的广告与追踪拦截扩展<br>
-      基于 Manifest V3 开发
-    </p>
-    <a class="btn" href="https://microsoftedge.microsoft.com/addons/detail/ogjodahjklhodkmnjhopkopflngicokg" target="_blank">从 Edge 商店安装</a>
-    <a class="btn btn-secondary" href="https://github.com/guihuo125/adshield" target="_blank">查看源码</a>
-    <div class="footer">
-      © 2026 AdShield · MIT License
+  </nav>
+
+  <!-- Hero -->
+  <section class="hero">
+    <div class="hero-inner">
+      <img src="icons/icon128.png" class="hero-logo" alt="AdShield" />
+      <h1 class="hero-title">轻量、隐私优先的<br>广告与追踪拦截器</h1>
+      <p class="hero-sub">
+        基于 Manifest V3 开发 · 支持规则订阅 · 云同步 · 多设备管理<br>
+        所有数据本地存储，不上传任何信息
+      </p>
+      <div class="hero-actions">
+        <a class="btn btn-primary" href="https://microsoftedge.microsoft.com/addons/detail/ogjodahjklhodkmnjhopkopflngicokg" target="_blank">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+            <polyline points="7 10 12 15 17 10"/>
+            <line x1="12" y1="15" x2="12" y2="3"/>
+          </svg>
+          从 Edge 商店安装
+        </a>
+        <a class="btn btn-secondary" href="https://github.com/guihuo125/adshield" target="_blank">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+            <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/>
+          </svg>
+          查看源码
+        </a>
+      </div>
+      <div class="hero-meta">开源免费 · MIT License · 无账号也能用</div>
     </div>
-  </div>
+  </section>
+
+  <!-- 功能特性 -->
+  <section class="section" id="features">
+    <div class="section-inner">
+      <h2 class="section-title">强大功能，开箱即用</h2>
+      <p class="section-sub">从广告拦截到云同步，AdShield 覆盖你的一切需求</p>
+      <div class="features">
+        <div class="feature">
+          <div class="feature-icon" style="background:#fee2e2;color:#ef4444;">🚫</div>
+          <div class="feature-title">广告拦截</div>
+          <div class="feature-desc">横幅、弹窗、视频贴片、信息流，全面覆盖主流广告网络</div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon" style="background:#ede9fe;color:#8b5cf6;">🛡</div>
+          <div class="feature-title">追踪防护</div>
+          <div class="feature-desc">阻止第三方跨站追踪器收集您的浏览行为</div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon" style="background:#fef3c7;color:#f59e0b;">🧹</div>
+          <div class="feature-title">URL 清理</div>
+          <div class="feature-desc">自动去除 utm_*、gclid、fbclid 等追踪参数</div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon" style="background:#dbeafe;color:#3b82f6;">👁</div>
+          <div class="feature-title">元素隐藏</div>
+          <div class="feature-desc">智能隐藏页面广告容器（含国内门户、百度联盟、广点通）</div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon" style="background:#f3e8ff;color:#a855f7;">🕵</div>
+          <div class="feature-title">反拦截检测</div>
+          <div class="feature-desc">规避网站检测脚本，不再被"请关闭广告拦截"困扰</div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon" style="background:#dcfce7;color:#10b981;">🦠</div>
+          <div class="feature-title">恶意防护</div>
+          <div class="feature-desc">拦截挖矿脚本与已知恶意、欺诈分发域名</div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon" style="background:#ecfeff;color:#06b6d4;">📡</div>
+          <div class="feature-title">规则订阅</div>
+          <div class="feature-desc">一键订阅 EasyList China / AdGuard 等主流规则源</div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon" style="background:#e0f2fe;color:#0284c7;">☁️</div>
+          <div class="feature-title">云同步（可选）</div>
+          <div class="feature-desc">跨设备同步配置、白名单、自定义规则</div>
+        </div>
+        <div class="feature">
+          <div class="feature-icon" style="background:#fce7f3;color:#ec4899;">🔐</div>
+          <div class="feature-title">账号安全</div>
+          <div class="feature-desc">密码强度策略、登录失败锁定、多设备管理</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 截图展示 -->
+  <section class="section" id="screenshots" style="background:var(--bg-50);">
+    <div class="section-inner">
+      <h2 class="section-title">界面预览</h2>
+      <p class="section-sub">简洁、直观的用户体验</p>
+      <div class="screenshots">
+        <div class="shot"><img src="screenshots/screenshot-1.png" alt="Popup 界面" /></div>
+        <div class="shot"><img src="screenshots/screenshot-2.png" alt="设置页" /></div>
+        <div class="shot"><img src="screenshots/screenshot-3.png" alt="拦截统计" /></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 安装 -->
+  <section class="section" id="install">
+    <div class="section-inner">
+      <h2 class="section-title">安装方法</h2>
+      <p class="section-sub">两种方式任选</p>
+      <div class="install-grid">
+        <div class="install-card">
+          <h3>🏪 从 Edge 商店安装 <span class="badge-rec">推荐</span></h3>
+          <ol>
+            <li>打开 Edge 商店页面</li>
+            <li>点「获取」按钮</li>
+            <li>自动安装完成</li>
+          </ol>
+          <a class="btn btn-primary" style="margin-top:16px;" href="https://microsoftedge.microsoft.com/addons/detail/ogjodahjklhodkmnjhopkopflngicokg" target="_blank">前往商店</a>
+        </div>
+        <div class="install-card">
+          <h3>📦 开发者模式加载</h3>
+          <ol>
+            <li>下载并解压 zip 包</li>
+            <li>打开 <code>chrome://extensions/</code></li>
+            <li>开启右上角「开发者模式」</li>
+            <li>点「加载已解压的扩展程序」</li>
+            <li>选择解压后的目录</li>
+          </ol>
+          <a class="btn btn-secondary" style="margin-top:16px;" href="https://github.com/guihuo125/adshield/releases/latest" target="_blank">下载最新版</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 隐私承诺 -->
+  <section class="section" id="privacy" style="background:var(--bg-50);">
+    <div class="section-inner">
+      <h2 class="section-title">隐私承诺</h2>
+      <p class="section-sub">你的数据，你做主</p>
+      <div class="privacy-box">
+        <ul>
+          <li><span>默认所有数据存储于本地浏览器，不上传任何信息</span></li>
+          <li><span>不收集浏览记录、搜索历史、页面内容</span></li>
+          <li><span>不接入任何广告 / 分析 / 遥测服务</span></li>
+          <li><span>不使用远程代码，所有 JS 随扩展打包</span></li>
+          <li><span>可选账号功能仅收集邮箱与加密密码，用于跨设备同步</span></li>
+          <li><span>开源可审计，源码完全公开</span></li>
+        </ul>
+        <div style="margin-top:20px;text-align:center;">
+          <a class="btn btn-secondary" href="https://github.com/guihuo125/adshield/blob/main/PRIVACY.md" target="_blank">查看完整隐私政策</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Footer -->
+  <footer class="footer">
+    <div class="footer-inner">
+      <div>© 2026 AdShield · MIT License</div>
+      <div class="footer-links">
+        <a href="https://github.com/guihuo125/adshield" target="_blank">GitHub</a>
+        <a href="https://github.com/guihuo125/adshield/blob/main/PRIVACY.md" target="_blank">隐私政策</a>
+        <a href="https://github.com/guihuo125/adshield/issues" target="_blank">反馈问题</a>
+        <a href="https://microsoftedge.microsoft.com/addons/detail/ogjodahjklhodkmnjhopkopflngicokg" target="_blank">Edge 商店</a>
+      </div>
+    </div>
+  </footer>
+
 </body>
 </html>
