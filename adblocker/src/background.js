@@ -751,20 +751,18 @@ async function updateAllSubscriptions() {
     }
     sub.lastUpdate = Date.now();
     if (result.ok) {
-      // 检测内容是否变化
+      // 检测内容是否变化（用于统计，不保留 hasUpdate）
       const oldHash = sub.lastHash;
       if (oldHash && oldHash !== newHash) {
-        sub.hasUpdate = true;
         totalChanged++;
-      } else if (!oldHash) {
-        // 首次（无历史 hash），不标记为"更新"
-        sub.hasUpdate = false;
       }
       sub.lastHash = newHash;
       sub.lastCount = result.count;
       sub.lastDomains = result.domains || 0;
       sub.lastExceptions = result.exceptions || 0;
       sub.lastPaths = result.paths || 0;
+      // 更新完成 → 清除 hasUpdate 标记（关键修复）
+      sub.hasUpdate = false;
       delete sub.lastError;
       totalOk++;
       totalRules += result.count;
