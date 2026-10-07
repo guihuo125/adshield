@@ -219,7 +219,9 @@
     // 国际
     "youtube.com", "twitter.com", "x.com", "facebook.com",
     "instagram.com", "reddit.com", "twitch.tv", "netflix.com",
-    "amazon.com", "ebay.com", "google.com", "github.com"
+    "amazon.com", "ebay.com", "google.com", "github.com",
+    // AdShield 自己的站点
+    "j3.ink", "github.io", "guihuo125.github.io"
   ];
 
   function detectAdBlockScripts() {
