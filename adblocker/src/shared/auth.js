@@ -687,86 +687,6 @@
     return data;
   }
 
-  // ===== cap.bug.im 人机验证 =====
-  const CAP_SITEKEY = "cap_d6331fc3796964954c7f9984";
-  const CAP_SECRET = "csk_9272ca498544ef57a15352308341c3c5fa529b31b53fba60";
-  const CAP_VERIFY_URL = "https://cap.bug.im/v1/siteverify";
-  const VERIFY_PAGE_URL = "https://adshield.j3.ink/verify.html";
-
-  async function requestCapToken(action, email) {
-    const params = new URLSearchParams();
-    params.set("action", action);
-    if (email) params.set("email", email);
-    const url = VERIFY_PAGE_URL + "?" + params.toString();
-
-    // 打开验证页
-    let tab;
-    try {
-      tab = await chrome.tabs.create({ url, active: true });
-    } catch (e) {
-      throw new Error("无法打开验证页面");
-    }
-    const tabId = tab.id;
-
-    return new Promise(function (resolve, reject) {
-      const startTime = Date.now();
-      const TIMEOUT = 5 * 60 * 1000;
-
-      async function check() {
-        if (Date.now() - startTime > TIMEOUT) {
-          try { chrome.tabs.remove(tabId); } catch (e) {}
-          reject(new Error("验证超时，请重试"));
-          return;
-        }
-
-        let tabAlive = true;
-        try { await chrome.tabs.get(tabId); } catch (e) { tabAlive = false; }
-
-        // 读取 window.__adshield_token
-        if (tabAlive) {
-          try {
-            const results = await chrome.scripting.executeScript({
-              target: { tabId: tabId },
-              func: function () { return window.__adshield_token || null; }
-            });
-            const tokenData = results && results[0] && results[0].result;
-            if (tokenData && tokenData.token && tokenData.action === action) {
-              try { chrome.tabs.remove(tabId); } catch (e) {}
-              resolve(tokenData.token);
-              return;
-            }
-          } catch (e) {}
-        }
-
-        if (!tabAlive) {
-          reject(new Error("已取消验证"));
-          return;
-        }
-
-        setTimeout(check, 400);
-      }
-
-      check();
-    });
-  }
-
-  // 服务端验证（用扩展内的 Secret）
-  async function verifyCapToken(token) {
-    const resp = await fetch(CAP_VERIFY_URL, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        secret: CAP_SECRET,
-        response: token
-      })
-    });
-    const data = await resp.json().catch(function(){ return {}; });
-    if (!data.success) {
-      throw new Error("人机验证失败" + (data.error ? ": " + data.error : ""));
-    }
-    return data;
-  }
-
   // ===== 登录 / 注册 =====
   async function doLogin(email, password) {
     // 0) 检查登录锁定
@@ -788,17 +708,6 @@
         mode: "local"
       });
       return { ok: true, mode: "local" };
-    }
-
-    // cap.bug.im 人机验证
-    let capToken = "";
-    try {
-      capToken = await requestCapToken("login", email);
-      await verifyCapToken(capToken);
-    } catch (e) {
-      const err = new Error(e.message || "人机验证失败");
-      err.code = "CAPTCHA_FAILED";
-      throw err;
     }
 
     // 真实模式
@@ -856,17 +765,6 @@
     if (!isSupabaseReady()) {
       return { ok: true, mode: "local", needVerify: false, registered: true, email };
     }
-    // cap.bug.im 人机验证
-    let capToken = "";
-    try {
-      capToken = await requestCapToken("register", email);
-      await verifyCapToken(capToken);
-    } catch (e) {
-      const err = new Error(e.message || "人机验证失败");
-      err.code = "CAPTCHA_FAILED";
-      throw err;
-    }
-
     const data = await sbRequest("/auth/v1/signup", {
       method: "POST",
       body: JSON.stringify({ email, password })
