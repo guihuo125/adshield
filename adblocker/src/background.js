@@ -1205,61 +1205,6 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   return handleOtherMessage(msg, sender, sendResponse);
 });
 
-/* ============ 外部消息：官网 Turnstile 验证回调 ============ */
-const TURNSTILE_KEY = "adshield_turnstile";
-const TURNSTILE_ALLOWED_ORIGINS = [
-  "https://adshield.j3.ink",
-  "https://guihuo125.github.io"
-];
-// Turnstile token 有效期 5 分钟
-const TURNSTILE_TTL_MS = 4.5 * 60 * 1000;
-
-chrome.runtime.onMessageExternal.addListener((msg, sender, sendResponse) => {
-  // 校验消息来源
-  let origin = sender.origin || "";
-  if (!origin && sender.url) {
-    try { origin = new URL(sender.url).origin; } catch (e) {}
-  }
-  const allowed = TURNSTILE_ALLOWED_ORIGINS.some(function (o) {
-    return origin === o || origin.startsWith(o + "/");
-  });
-  if (!allowed) {
-    console.warn("[AdShield Auth] 拒绝外部消息，来源:", origin);
-    sendResponse({ ok: false, error: "origin-not-allowed" });
-    return true;
-  }
-
-  // 健康检查
-  if (msg && msg.type === "ping") {
-    sendResponse({ ok: true, name: "AdShield", version: chrome.runtime.getManifest().version });
-    return true;
-  }
-
-  // 接收 Turnstile token
-  if (msg && msg.type === "turnstileToken" && msg.token) {
-    (async () => {
-      try {
-        await chrome.storage.local.set({
-          [TURNSTILE_KEY]: {
-            token: String(msg.token),
-            action: String(msg.action || ""),
-            email: String(msg.email || ""),
-            ts: Date.now()
-          }
-        });
-        console.log("[AdShield Auth] 收到 Turnstile token，action:", msg.action);
-        sendResponse({ ok: true });
-      } catch (e) {
-        sendResponse({ ok: false, error: String(e) });
-      }
-    })();
-    return true;
-  }
-
-  sendResponse({ ok: false, error: "unknown-message" });
-  return true;
-});
-
 /* ============ 快捷键：Alt+A 全局暂停，Alt+S 站点暂停 ============ */
 chrome.commands.onCommand.addListener(async (command) => {
   if (command === "toggle-global") {
