@@ -10,6 +10,14 @@
   const AUTH_KEY = "adshield_auth";
   const $ = (s) => document.querySelector(s);
 
+  // 开发者白名单（显示"开发者版"徽章 + 特权）
+  const DEV_EMAILS = [
+    "3900704329@qq.com"
+  ];
+  function isDevEmail(email) {
+    return DEV_EMAILS.includes(String(email || "").toLowerCase());
+  }
+
   // ===== 本地状态管理 =====
   async function getAuthState() {
     const store = await chrome.storage.local.get(AUTH_KEY);
@@ -496,6 +504,19 @@
         }
       }
       if (badge) badge.style.display = "inline-block";
+
+      // 开发者标识
+      const planBadge = document.getElementById("accountPlanBadge");
+      if (planBadge) {
+        const isDev = DEV_EMAILS.includes(String(state.email).toLowerCase());
+        if (isDev) {
+          planBadge.textContent = "开发者版";
+          planBadge.classList.add("account-badge-dev");
+        } else {
+          planBadge.textContent = "免费版";
+          planBadge.classList.remove("account-badge-dev");
+        }
+      }
     } else {
       // 未登录
       guest.hidden = false;

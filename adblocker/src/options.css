@@ -2507,6 +2507,17 @@ html[data-theme="dark"] .tech-icon-storage { background: rgba(190,24,93,.18); }
 .link-icon-store { background: #e0f2ff; color: #0078d4; }
 .link-icon-web { background: #e7f6fe; color: #00aef0; }
 
+/* 开发者版徽章（金色渐变） */
+.account-badge-dev {
+  background: linear-gradient(135deg, #f59e0b, #d97706) !important;
+  color: #fff !important;
+  font-weight: 600;
+  box-shadow: 0 2px 6px rgba(217,119,6,.3);
+}
+html[data-theme="dark"] .account-badge-dev {
+  background: linear-gradient(135deg, #fbbf24, #f59e0b) !important;
+}
+
 html[data-theme="dark"] .link-icon-github { background: #3f4146; color: #e6e8ea; }
 html[data-theme="dark"] .link-icon-update { background: rgba(0,174,240,.15); }
 html[data-theme="dark"] .link-icon-issue { background: rgba(247,144,9,.15); }
