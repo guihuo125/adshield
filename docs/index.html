@@ -15,31 +15,113 @@ body{font-family:var(--font-sans);font-size:16px;line-height:1.6;color:var(--ink
 
 /* ========== 暗色主题 ========== */
 html[data-theme="dark"]{
-  --ink:#f4f4f5;
-  --ink-2:#d4d4d8;
-  --ink-3:#a1a1aa;
-  --ink-4:#71717a;
-  --line:#27272a;
-  --line-2:#18181b;
-  --paper:#0f0f10;
+  --ink:#f5f5f7;
+  --ink-2:#c8c9d0;
+  --ink-3:#8a8b94;
+  --ink-4:#5c5d66;
+  --line:#28282d;
+  --line-2:#1c1c21;
+  --paper:#16161a;
   color-scheme:dark;
 }
-html[data-theme="dark"] body{background:#0a0a0a}
-html[data-theme="dark"] .nav.scrolled{background:rgba(10,10,10,.82)}
-html[data-theme="dark"] .nav-inner{background:rgba(20,20,20,.72);border-color:rgba(255,255,255,.06)}
-html[data-theme="dark"] .hero-bg::before{background:radial-gradient(ellipse at center,rgba(37,99,235,.18),rgba(124,58,237,.08) 40%,transparent 70%)}
-html[data-theme="dark"] .hero-bg::after{background-image:linear-gradient(rgba(255,255,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.03) 1px,transparent 1px)}
-html[data-theme="dark"] .feature{background:#0f0f10}
-html[data-theme="dark"] .feature:hover{background:#141415}
-html[data-theme="dark"] .inst{background:#0f0f10}
-html[data-theme="dark"] .quote{background:linear-gradient(180deg,#0a0a0a 0%,#0f0f10 100%)}
-html[data-theme="dark"] .footer{background:#0a0a0a}
-html[data-theme="dark"] .shot{background:#18181b}
-html[data-theme="dark"] .shot-cap{background:#0f0f10}
-html[data-theme="dark"] .account-badge-dev{background:linear-gradient(135deg,rgba(217,119,6,.22),rgba(180,83,9,.18)) !important;color:#fbbf24 !important;border-color:rgba(251,191,36,.3)}
-html[data-theme="dark"] .btn-primary{box-shadow:0 8px 24px rgba(37,99,235,.35),inset 0 1px 0 rgba(255,255,255,.1)}
-html[data-theme="dark"] .btn-dark{background:#f4f4f5;color:#0a0a0a}
+html[data-theme="dark"] body{
+  background:#111114;
+  color:var(--ink);
+}
+/* 导航 */
+html[data-theme="dark"] .nav.scrolled{background:rgba(17,17,20,.85);border-bottom-color:var(--line)}
+html[data-theme="dark"] .nav-inner{background:rgba(22,22,26,.78);border-color:rgba(255,255,255,.05);box-shadow:0 1px 2px rgba(0,0,0,.2),0 8px 32px rgba(0,0,0,.3)}
+html[data-theme="dark"] .nav-links a:hover{background:rgba(255,255,255,.05)}
+/* Hero 背景 */
+html[data-theme="dark"] .hero-bg::before{background:radial-gradient(ellipse at center,rgba(37,99,235,.22),rgba(124,58,237,.1) 40%,transparent 70%)}
+html[data-theme="dark"] .hero-bg::after{background-image:linear-gradient(rgba(255,255,255,.035) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.035) 1px,transparent 1px)}
+/* 渐变标题 - 深色模式下更亮的版本 */
+html[data-theme="dark"] .hero h1 em{
+  background:linear-gradient(135deg,#60a5fa 0%,#a78bfa 55%,#4ade80 100%);
+  -webkit-background-clip:text;background-clip:text;
+}
+html[data-theme="dark"] .sec-h em{
+  background:linear-gradient(135deg,#60a5fa,#a78bfa);
+  -webkit-background-clip:text;background-clip:text;
+}
+/* 卡片 */
+html[data-theme="dark"] .feature{
+  background:#16161a;
+  border-color:var(--line);
+}
+html[data-theme="dark"] .feature:hover{
+  background:#1c1c21;
+  border-color:#3f3f46;
+  box-shadow:0 12px 32px rgba(0,0,0,.3),0 20px 60px rgba(37,99,235,.08);
+}
+html[data-theme="dark"] .feature::before{
+  background:linear-gradient(135deg,#60a5fa,#a78bfa,#4ade80);
+}
+html[data-theme="dark"] .inst{
+  background:#16161a;
+  border-color:var(--line);
+}
+html[data-theme="dark"] .inst:hover{border-color:#3f3f46}
+html[data-theme="dark"] .inst-h .num{background:#f5f5f7;color:#111114}
+/* 区块背景 */
+html[data-theme="dark"] .section-alt,
+html[data-theme="dark"] .quote{
+  background:#0d0d10;
+  border-color:var(--line);
+}
+html[data-theme="dark"] .quote{background:linear-gradient(180deg,#111114 0%,#0d0d10 100%)}
+/* 截图 */
+html[data-theme="dark"] .shot{
+  background:#16161a;
+  border-color:var(--line);
+  box-shadow:0 4px 16px rgba(0,0,0,.3),0 16px 48px rgba(0,0,0,.3);
+}
+html[data-theme="dark"] .shot:hover{
+  border-color:#3f3f46;
+  box-shadow:0 8px 24px rgba(0,0,0,.4),0 32px 80px rgba(37,99,235,.12);
+}
+/* 隐私区 */
+html[data-theme="dark"] .priv{border-top-color:#f5f5f7}
+html[data-theme="dark"] .priv::before{background:#60a5fa}
+html[data-theme="dark"] .priv-list li::before{color:#4ade80}
+/* 统计数字 */
+html[data-theme="dark"] .hero-foot-num.c1{color:#60a5fa}
+html[data-theme="dark"] .hero-foot-num.c2{color:#a78bfa}
+html[data-theme="dark"] .hero-foot-num.c3{color:#4ade80}
+html[data-theme="dark"] .hero-foot-num.c4{color:#fbbf24}
+/* 功能编号配色 - 深色模式更亮 */
+html[data-theme="dark"] .feat-item:nth-child(6n+1) .feat-num{color:#f87171}
+html[data-theme="dark"] .feat-item:nth-child(6n+2) .feat-num{color:#a78bfa}
+html[data-theme="dark"] .feat-item:nth-child(6n+3) .feat-num{color:#22d3ee}
+html[data-theme="dark"] .feat-item:nth-child(6n+4) .feat-num{color:#60a5fa}
+html[data-theme="dark"] .feat-item:nth-child(6n+5) .feat-num{color:#fbbf24}
+html[data-theme="dark"] .feat-item:nth-child(6n+6) .feat-num{color:#4ade80}
+/* 按钮 */
+html[data-theme="dark"] .btn-primary{
+  background:linear-gradient(135deg,#3b82f6,#2563eb);
+  box-shadow:0 8px 24px rgba(59,130,246,.35),inset 0 1px 0 rgba(255,255,255,.15);
+}
+html[data-theme="dark"] .btn-primary:hover{
+  box-shadow:0 16px 40px rgba(59,130,246,.45),inset 0 1px 0 rgba(255,255,255,.15);
+}
+html[data-theme="dark"] .btn-dark{background:#f5f5f7;color:#111114}
 html[data-theme="dark"] .btn-dark:hover{background:#fff}
+html[data-theme="dark"] .btn-ghost{background:transparent;color:#f5f5f7;border-color:#3f3f46}
+html[data-theme="dark"] .btn-ghost:hover{background:#1c1c21;border-color:#52525b}
+html[data-theme="dark"] .btn-link{color:#c8c9d0}
+html[data-theme="dark"] .btn-link:hover{color:#60a5fa}
+/* 页脚 */
+html[data-theme="dark"] .footer{
+  background:#0d0d10;
+  border-top-color:var(--line);
+}
+html[data-theme="dark"] .footer a:hover{color:#60a5fa}
+/* 主题切换 */
+html[data-theme="dark"] .theme-switch{background:#1c1c21}
+html[data-theme="dark"] .theme-switch button.active{background:#2a2a30;color:#f5f5f7;box-shadow:0 1px 3px rgba(0,0,0,.4)}
+/* 导航 CTA 保持白底 */
+html[data-theme="dark"] .nav-cta{background:#f5f5f7 !important;color:#111114 !important}
+html[data-theme="dark"] .nav-cta:hover{background:#fff !important}
 
 /* ========== 主题切换组件 ========== */
 .theme-switch{display:inline-flex;align-items:center;padding:3px;background:var(--line-2);border-radius:999px;gap:2px;margin-left:8px;transition:background .3s}
