@@ -129,21 +129,20 @@ html[data-theme="dark"] .footer{
 }
 html[data-theme="dark"] .footer a:hover{color:#60a5fa}
 /* 主题切换 */
-html[data-theme="dark"] .theme-switch-float{background:rgba(30,30,35,.8);border-color:rgba(255,255,255,.06);box-shadow:0 1px 2px rgba(0,0,0,.15),0 8px 24px rgba(0,0,0,.25)}
-html[data-theme="dark"] .theme-switch-float button{color:#9d9ea8}
-html[data-theme="dark"] .theme-switch-float button:hover{color:#e6e6ea}
-html[data-theme="dark"] .theme-switch-float button.active{background:#3a3a42;color:#f5f5f7;box-shadow:0 1px 3px rgba(0,0,0,.3)}
+html[data-theme="dark"] .theme-switch{background:rgba(255,255,255,.06)}
+html[data-theme="dark"] .theme-switch button{color:#9d9ea8}
+html[data-theme="dark"] .theme-switch button:hover{color:#e6e6ea}
+html[data-theme="dark"] .theme-switch button.active{background:#3a3a42;color:#f5f5f7;box-shadow:0 1px 3px rgba(0,0,0,.3)}
 /* 导航 CTA 保持白底 */
 html[data-theme="dark"] .nav-cta{background:#f5f5f7 !important;color:#18181c !important;box-shadow:0 2px 8px rgba(0,0,0,.3)}
 html[data-theme="dark"] .nav-cta:hover{background:#fff !important;transform:translateY(-1px);box-shadow:0 4px 14px rgba(0,0,0,.4)}
 
 /* ========== 主题切换组件 ========== */
-.theme-switch-float{position:fixed;top:80px;right:32px;z-index:101;display:inline-flex;align-items:center;padding:3px;background:rgba(255,255,255,.72);backdrop-filter:saturate(180%) blur(16px);-webkit-backdrop-filter:saturate(180%) blur(16px);border:1px solid rgba(0,0,0,.06);border-radius:999px;gap:2px;transition:all .3s cubic-bezier(.4,0,.2,1);box-shadow:0 1px 2px rgba(0,0,0,.04),0 8px 24px rgba(0,0,0,.06)}
-.theme-switch-float button{background:transparent;border:none;width:30px;height:30px;border-radius:999px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--ink-3);transition:all .2s cubic-bezier(.4,0,.2,1);padding:0;font-family:inherit}
-.theme-switch-float button svg{width:15px;height:15px;display:block}
-.theme-switch-float button:hover{color:var(--ink)}
-.theme-switch-float button.active{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.1)}
-@media (max-width:720px){.theme-switch-float{top:72px;right:16px}.theme-switch-float button{width:28px;height:28px}}
+.theme-switch{display:inline-flex;align-items:center;padding:3px;background:rgba(0,0,0,.04);border-radius:999px;gap:2px;margin-left:6px;transition:background .3s}
+.theme-switch button{background:transparent;border:none;width:28px;height:28px;border-radius:999px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--ink-3);transition:all .2s cubic-bezier(.4,0,.2,1);padding:0;font-family:inherit}
+.theme-switch button svg{width:15px;height:15px;display:block}
+.theme-switch button:hover{color:var(--ink)}
+.theme-switch button.active{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.1)}
 a{color:inherit;text-decoration:none}
 img{max-width:100%;display:block}
 code{font-family:var(--font-mono);font-size:.88em;padding:1px 6px;background:var(--line-2);border-radius:4px;color:var(--ink-2)}
@@ -305,12 +304,7 @@ code{font-family:var(--font-mono);font-size:.88em;padding:1px 6px;background:var
 <a href="#privacy">隐私</a>
 <a href="https://github.com/guihuo125/adshield" target="_blank">GitHub</a>
 <a href="https://microsoftedge.microsoft.com/addons/detail/ogjodahjklhodkmnjhopkopflngicokg" target="_blank" class="nav-cta">安装</a>
-</div>
-</div>
-</nav>
-
-<!-- 悬浮主题切换（右上角固定） -->
-<div class="theme-switch-float" id="themeSwitch" role="group" aria-label="主题切换">
+<div class="theme-switch" id="themeSwitch" role="group" aria-label="主题切换">
 <button type="button" data-theme-value="light" title="亮色" aria-label="亮色">
 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="6.34" y2="6.34"/><line x1="17.66" y1="17.66" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="6.34" y2="17.66"/><line x1="17.66" y1="6.34" x2="19.07" y2="4.93"/></svg>
 </button>
@@ -321,6 +315,9 @@ code{font-family:var(--font-mono);font-size:.88em;padding:1px 6px;background:var
 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
 </button>
 </div>
+</div>
+</div>
+</nav>
 
 <section class="hero">
 <div class="hero-meta r in">
