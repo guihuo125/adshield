@@ -11,7 +11,43 @@
 *{box-sizing:border-box;margin:0;padding:0}
 :root{--ink:#0a0a0a;--ink-2:#3f3f46;--ink-3:#71717a;--ink-4:#a1a1aa;--line:#e4e4e7;--line-2:#f4f4f5;--paper:#fafafa;--blue:#2563eb;--blue-2:#1d4ed8;--green:#16a34a;--violet:#7c3aed;--amber:#d97706;--rose:#e11d48;--cyan:#0891b2;--font-sans:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;--font-serif:"Iowan Old Style","Apple Garamond",Baskerville,"Times New Roman",Georgia,serif;--font-mono:"SF Mono",ui-monospace,Menlo,Consolas,monospace}
 html{scroll-behavior:smooth;-webkit-text-size-adjust:100%}
-body{font-family:var(--font-sans);font-size:16px;line-height:1.6;color:var(--ink);background:#fff;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;overflow-x:hidden}
+body{font-family:var(--font-sans);font-size:16px;line-height:1.6;color:var(--ink);background:#fff;-webkit-font-smoothing:antialiased;text-rendering:optimizeLegibility;overflow-x:hidden;transition:background-color .3s,color .3s}
+
+/* ========== 暗色主题 ========== */
+html[data-theme="dark"]{
+  --ink:#f4f4f5;
+  --ink-2:#d4d4d8;
+  --ink-3:#a1a1aa;
+  --ink-4:#71717a;
+  --line:#27272a;
+  --line-2:#18181b;
+  --paper:#0f0f10;
+  color-scheme:dark;
+}
+html[data-theme="dark"] body{background:#0a0a0a}
+html[data-theme="dark"] .nav.scrolled{background:rgba(10,10,10,.82)}
+html[data-theme="dark"] .nav-inner{background:rgba(20,20,20,.72);border-color:rgba(255,255,255,.06)}
+html[data-theme="dark"] .hero-bg::before{background:radial-gradient(ellipse at center,rgba(37,99,235,.18),rgba(124,58,237,.08) 40%,transparent 70%)}
+html[data-theme="dark"] .hero-bg::after{background-image:linear-gradient(rgba(255,255,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.03) 1px,transparent 1px)}
+html[data-theme="dark"] .feature{background:#0f0f10}
+html[data-theme="dark"] .feature:hover{background:#141415}
+html[data-theme="dark"] .inst{background:#0f0f10}
+html[data-theme="dark"] .quote{background:linear-gradient(180deg,#0a0a0a 0%,#0f0f10 100%)}
+html[data-theme="dark"] .footer{background:#0a0a0a}
+html[data-theme="dark"] .shot{background:#18181b}
+html[data-theme="dark"] .shot-cap{background:#0f0f10}
+html[data-theme="dark"] .account-badge-dev{background:linear-gradient(135deg,rgba(217,119,6,.22),rgba(180,83,9,.18)) !important;color:#fbbf24 !important;border-color:rgba(251,191,36,.3)}
+html[data-theme="dark"] .btn-primary{box-shadow:0 8px 24px rgba(37,99,235,.35),inset 0 1px 0 rgba(255,255,255,.1)}
+html[data-theme="dark"] .btn-dark{background:#f4f4f5;color:#0a0a0a}
+html[data-theme="dark"] .btn-dark:hover{background:#fff}
+
+/* ========== 主题切换组件 ========== */
+.theme-switch{display:inline-flex;align-items:center;padding:3px;background:var(--line-2);border-radius:999px;gap:2px;margin-left:8px;transition:background .3s}
+.theme-switch button{background:transparent;border:none;width:28px;height:28px;border-radius:999px;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--ink-3);transition:all .2s cubic-bezier(.4,0,.2,1);padding:0;font-family:inherit}
+.theme-switch button svg{width:15px;height:15px;display:block}
+.theme-switch button:hover{color:var(--ink)}
+.theme-switch button.active{background:#fff;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.08)}
+html[data-theme="dark"] .theme-switch button.active{background:#27272a;color:#f4f4f5;box-shadow:0 1px 3px rgba(0,0,0,.3)}
 a{color:inherit;text-decoration:none}
 img{max-width:100%;display:block}
 code{font-family:var(--font-mono);font-size:.88em;padding:1px 6px;background:var(--line-2);border-radius:4px;color:var(--ink-2)}
@@ -172,6 +208,17 @@ code{font-family:var(--font-mono);font-size:.88em;padding:1px 6px;background:var
 <a href="#install">安装</a>
 <a href="#privacy">隐私</a>
 <a href="https://github.com/guihuo125/adshield" target="_blank">GitHub</a>
+<div class="theme-switch" id="themeSwitch" role="group" aria-label="主题切换">
+<button type="button" data-theme-value="light" title="亮色" aria-label="亮色">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="4"/><line x1="12" y1="20" x2="12" y2="22"/><line x1="4.93" y1="4.93" x2="6.34" y2="6.34"/><line x1="17.66" y1="17.66" x2="19.07" y2="19.07"/><line x1="2" y1="12" x2="4" y2="12"/><line x1="20" y1="12" x2="22" y2="12"/><line x1="4.93" y1="19.07" x2="6.34" y2="17.66"/><line x1="17.66" y1="6.34" x2="19.07" y2="4.93"/></svg>
+</button>
+<button type="button" data-theme-value="system" title="跟随系统" aria-label="跟随系统">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+</button>
+<button type="button" data-theme-value="dark" title="暗色" aria-label="暗色">
+<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+</button>
+</div>
 <a href="https://microsoftedge.microsoft.com/addons/detail/ogjodahjklhodkmnjhopkopflngicokg" target="_blank" class="nav-cta">安装</a>
 </div>
 </div>
@@ -314,6 +361,51 @@ AdShield
 </footer>
 
 <script>
+/* 主题切换（在渲染前执行，避免闪烁） */
+(function(){
+  var KEY = "adshield_site_theme";
+  var saved = null;
+  try { saved = localStorage.getItem(KEY); } catch(e){}
+  var mode = saved || "system";
+  var prefersDark = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+  var effective = mode === "system" ? (prefersDark ? "dark" : "light") : mode;
+  document.documentElement.setAttribute("data-theme", effective);
+
+  function applyTheme(newMode){
+    try { localStorage.setItem(KEY, newMode); } catch(e){}
+    var dk = window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches;
+    var eff = newMode === "system" ? (dk ? "dark" : "light") : newMode;
+    document.documentElement.setAttribute("data-theme", eff);
+    document.querySelectorAll("#themeSwitch button").forEach(function(b){
+      b.classList.toggle("active", b.getAttribute("data-theme-value") === newMode);
+    });
+  }
+
+  document.addEventListener("DOMContentLoaded", function(){
+    var sw = document.getElementById("themeSwitch");
+    if (!sw) return;
+    sw.addEventListener("click", function(e){
+      var btn = e.target.closest("button[data-theme-value]");
+      if (!btn) return;
+      applyTheme(btn.getAttribute("data-theme-value"));
+    });
+    // 初始化 active 状态
+    sw.querySelectorAll("button").forEach(function(b){
+      b.classList.toggle("active", b.getAttribute("data-theme-value") === mode);
+    });
+    // 监听系统变化
+    if (window.matchMedia) {
+      try {
+        window.matchMedia("(prefers-color-scheme: dark)").addEventListener("change", function(){
+          var cur = null;
+          try { cur = localStorage.getItem(KEY); } catch(e){}
+          if (cur === "system" || !cur) applyTheme("system");
+        });
+      } catch(e){}
+    }
+  });
+})();
+
 (function(){var n=document.getElementById("nav");function s(){if(window.scrollY>20)n.classList.add("scrolled");else n.classList.remove("scrolled")}window.addEventListener("scroll",s,{passive:true});s()})();
 (function(){var e=document.querySelectorAll(".r");if(!("IntersectionObserver" in window)){e.forEach(function(x){x.classList.add("in")});return}var io=new IntersectionObserver(function(en){en.forEach(function(t){if(t.isIntersecting){t.target.classList.add("in");io.unobserve(t.target)}})},{threshold:0.15,rootMargin:"0px 0px -80px 0px"});e.forEach(function(x){io.observe(x)})})();
 </script>
