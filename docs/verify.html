@@ -3,12 +3,13 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="referrer" content="strict-origin-when-cross-origin" />
 <title>AdShield 安全验证</title>
 <link rel="icon" href="icons/new-icon.png" />
-<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
+<script src="https://cap.bug.im/v1.js" defer></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-:root{--ink:#0a0a0a;--ink-3:#71717a;--line:#e4e4e7;--blue:#2563eb}
+:root{--ink:#0a0a0a;--ink-3:#71717a;--line:#e4e4e7;--blue:#2563eb;--green:#16a34a;--red:#dc2626}
 body{font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#f0f9ff 0%,#fff 100%);padding:24px;color:var(--ink);-webkit-font-smoothing:antialiased}
 .card{background:#fff;border:1px solid var(--line);border-radius:20px;padding:48px 40px;max-width:480px;width:100%;box-shadow:0 4px 12px rgba(0,0,0,.04),0 24px 60px rgba(0,0,0,.08);text-align:center;position:relative;overflow:hidden}
 .card::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#2563eb,#7c3aed,#16a34a)}
@@ -31,7 +32,7 @@ h1{font-size:22px;font-weight:700;letter-spacing:-.5px;margin-bottom:10px}
   <img src="icons/new-icon.png" class="logo" alt="AdShield" />
   <h1>安全验证</h1>
   <p class="sub">AdShield 正在验证您的请求，<br>请完成下方人机验证。</p>
-  <div class="widget-wrap" id="widgetWrap"></div>
+  <div class="widget-wrap"><div class="cap-captcha" id="capWidget" data-sitekey="cap_d6331fc3796964954c7f9984"></div></div>
   <div class="status" id="status"></div>
   <div class="footer">
     验证通过后会自动返回扩展程序。<br>
@@ -40,68 +41,62 @@ h1{font-size:22px;font-weight:700;letter-spacing:-.5px;margin-bottom:10px}
 </div>
 <script>
 (function(){
-  var SITE_KEY = "0x4AAAAAAAFQCBXaTIYuaCUyx";
+  var statusEl = document.getElementById("status");
   var params = new URLSearchParams(location.search);
   var action = params.get("action") || "generic";
   var email = params.get("email") || "";
-  var statusEl = document.getElementById("status");
 
   function setStatus(text, type) {
     statusEl.textContent = text;
     statusEl.className = "status " + type;
   }
 
-  function loadWidget() {
-    if (!window.turnstile) {
-      setStatus("正在加载验证组件，请稍候...", "info");
-      setTimeout(loadWidget, 200);
+  setStatus("正在加载验证组件，请稍候...", "info");
+
+  // 监听 token 出现：轮询 DOM 里的隐藏字段
+  var pollCount = 0;
+  var maxPolls = 600;   // 5 分钟
+  var pollTimer = setInterval(function(){
+    pollCount++;
+    if (pollCount > maxPolls) {
+      clearInterval(pollTimer);
+      setStatus("验证超时，请刷新重试", "err");
       return;
     }
-    try {
-      window.turnstile.render("#widgetWrap", {
-        sitekey: SITE_KEY,
-        theme: "light",
-        size: "normal",
-        action: action,
-        callback: onSuccess,
-        "error-callback": onError,
-        "expired-callback": onExpired
-      });
-      setStatus("请完成上方人机验证", "info");
-    } catch (e) {
-      setStatus("验证组件加载失败: " + e.message, "err");
+    // 尝试多种可能的选择器
+    var token = "";
+    var el1 = document.querySelector('input[name="cap-response"]');
+    if (el1 && el1.value) token = el1.value;
+    if (!token) {
+      var el2 = document.querySelector('input[name="cf-turnstile-response"]');
+      if (el2 && el2.value) token = el2.value;
     }
-  }
+    if (!token) {
+      var el3 = document.querySelector('textarea[name="cap-response"]');
+      if (el3 && el3.value) token = el3.value;
+    }
+    if (token) {
+      clearInterval(pollTimer);
+      window.__adshield_token = {
+        token: token,
+        action: action,
+        email: email,
+        ts: Date.now(),
+        source: "cap.bug.im"
+      };
+      setStatus("验证成功！请回到扩展继续。", "ok");
+      // 立即关闭（1.5 秒后）
+      setTimeout(function(){ try { window.close(); } catch(e){} }, 1500);
+    }
+  }, 500);
 
-  function onSuccess(token) {
-    // 把 token 存到 window 全局变量，扩展后台会来读
-    window.__adshield_token = {
-      token: token,
-      action: action,
-      email: email,
-      ts: Date.now()
-    };
-    // 也存到 document.title 便于检测（备用）
-    document.title = "✓ 验证成功 - AdShield";
-    setStatus("验证成功！请回到扩展继续。", "ok");
-    // 3 秒后自动关闭
-    setTimeout(function() { window.close(); }, 3000);
-  }
-
-  function onError(errCode) {
-    setStatus("验证出错（错误码 " + errCode + "），请刷新重试", "err");
-  }
-
-  function onExpired() {
-    setStatus("验证已过期，请重新完成", "info");
-    try { window.turnstile.reset(); } catch (e) {}
-  }
-
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", loadWidget);
-  } else {
-    loadWidget();
-  }
+  // 3 秒后如果还没看到 widget，提示
+  setTimeout(function(){
+    var widget = document.getElementById("capWidget");
+    if (widget && widget.children.length === 0) {
+      setStatus("正在初始化验证组件...", "info");
+    }
+  }, 3000);
 })();
 </script>
 </body>
