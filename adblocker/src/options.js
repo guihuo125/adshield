@@ -1106,6 +1106,9 @@ async function render() {
   // 规则集开关（如果有）
   renderRulesets(s);
 
+  // 防闪烁：所有开关状态设置完成，显示出来
+  document.body.classList.add("ready");
+
   // 暂停开关
   const swPause = $("#swGlobalPause");
   if (swPause) swPause.checked = !!paused;
