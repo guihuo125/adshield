@@ -978,6 +978,29 @@ textarea:focus {
 #subList:empty {
   display: none;
 }
+/* 骨架屏（首屏加载时显示） */
+.sub-skeleton {
+  padding: 14px 16px;
+  background: var(--bg-secondary);
+  border: 1px solid var(--border-primary);
+  border-radius: var(--radius-m);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.sk-line {
+  height: 12px;
+  background: linear-gradient(90deg, var(--bg-tertiary) 25%, var(--border-primary) 50%, var(--bg-tertiary) 75%);
+  background-size: 200% 100%;
+  border-radius: 4px;
+  animation: skeletonShimmer 1.4s ease-in-out infinite;
+}
+.sk-line-1 { width: 35%; height: 14px; }
+.sk-line-2 { width: 65%; }
+@keyframes skeletonShimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
 #subList .empty {
   list-style: none;
   padding: 12px 0;
