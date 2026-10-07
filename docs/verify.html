@@ -44,7 +44,36 @@ h1{font-size:22px;font-weight:700;letter-spacing:-.5px;margin-bottom:10px}
 <script>
 (function(){
   var SITE_KEY = "0x4AAAAAAAFQCBXaTIYuaCUyx";
-  var EXT_ID = "gbkfkgfigndbbbdaiffebegiiddoikin";
+  // 支持多个可能的扩展 ID（商店版 + 开发版）
+  var EXT_IDS = [
+    "gbkfkgfigndbbbdaiffebegiiddoikin",
+    "ogjodahjklhodkmnjhopkopflngicokg",
+    "gbmgbkgkihcdobchpbmhgldloafnnci"
+  ];
+  // 探测哪个扩展在线
+  var EXT_ID = null;
+  function detectExtension() {
+    return new Promise(function(resolve) {
+      var i = 0;
+      function tryNext() {
+        if (i >= EXT_IDS.length) { resolve(null); return; }
+        var id = EXT_IDS[i++];
+        try {
+          chrome.runtime.sendMessage(id, { type: "ping" }, function(resp) {
+            if (chrome.runtime.lastError || !resp || !resp.ok) {
+              tryNext();
+            } else {
+              console.log("[AdShield Verify] 找到扩展:", id, resp.version);
+              resolve(id);
+            }
+          });
+        } catch (e) {
+          tryNext();
+        }
+      }
+      tryNext();
+    });
+  }
 
   // 从 URL 参数读取 action 和 email
   var params = new URLSearchParams(location.search);
@@ -64,22 +93,16 @@ h1{font-size:22px;font-weight:700;letter-spacing:-.5px;margin-bottom:10px}
     return;
   }
 
-  // 确认扩展在线
-  var pingOk = false;
-  try {
-    chrome.runtime.sendMessage(EXT_ID, { type: "ping" }, function(resp) {
-      if (chrome.runtime.lastError) {
-        console.warn("ping 失败:", chrome.runtime.lastError.message);
-        return;
-      }
-      if (resp && resp.ok) {
-        pingOk = true;
-        console.log("扩展在线:", resp.name, resp.version);
-      }
-    });
-  } catch (e) {
-    console.warn("ping 异常:", e);
-  }
+  // 先探测哪个扩展 ID 在线
+  detectExtension().then(function(foundId) {
+    if (!foundId) {
+      setStatus("未检测到 AdShield 扩展。请确保扩展已启用并重试。", "err");
+      return;
+    }
+    EXT_ID = foundId;
+    // 加载 Turnstile
+    loadWidget();
+  });
 
   // 加载 Turnstile
   function loadWidget() {
@@ -138,11 +161,6 @@ h1{font-size:22px;font-weight:700;letter-spacing:-.5px;margin-bottom:10px}
     try { window.turnstile.reset(); } catch (e) {}
   }
 
-  if (document.readyState === "loading") {
-    document.addEventListener("DOMContentLoaded", loadWidget);
-  } else {
-    loadWidget();
-  }
 })();
 </script>
 </body>
