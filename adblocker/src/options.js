@@ -29,6 +29,9 @@ const CATS = [
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => document.querySelectorAll(s);
 
+// 兜底：3 秒后无论 JS 是否完成，都移除 loading（防永久隐藏）
+setTimeout(() => { try { document.body.classList.remove("loading"); } catch(e){} }, 3000);
+
 // 版本号：从 manifest 动态读取，避免硬编码
 (function syncVersion() {
   try {
@@ -1107,7 +1110,7 @@ async function render() {
   renderRulesets(s);
 
   // 防闪烁：所有开关状态设置完成，显示出来
-  document.body.classList.add("ready");
+  document.body.classList.remove("loading");
 
   // 暂停开关
   const swPause = $("#swGlobalPause");

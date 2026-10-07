@@ -544,14 +544,10 @@ html[data-theme="dark"] .theme-btn.active {
   flex-shrink: 0;
 }
 .switch input { opacity: 0; width: 0; height: 0; }
-/* 防闪烁：JS 就绪前隐藏开关 */
-body:not(.ready) .switch,
-body:not(.ready) .switch-toggle {
+/* 防闪烁：页面渲染前隐藏开关 */
+body.loading .switch,
+body.loading .switch-toggle {
   visibility: hidden;
-}
-body.ready .switch,
-body.ready .switch-toggle {
-  transition: opacity .15s ease;
 }
 .switch .slider {
   position: absolute; inset: 0;
