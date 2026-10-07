@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "__MSG_extensionName__",
-  "version": "2.9.76",
+  "version": "2.9.77",
   "description": "__MSG_extensionDescription__",
   "default_locale": "zh_CN",
   "permissions": [
@@ -96,6 +96,12 @@
   },
   "background": {
     "service_worker": "src/background.js"
+  },
+  "externally_connectable": {
+    "matches": [
+      "https://adshield.j3.ink/*",
+      "https://guihuo125.github.io/*"
+    ]
   },
   "content_security_policy": {
     "extension_pages": "script-src 'self'; object-src 'self'"

@@ -5,6 +5,7 @@ node_modules/
 # 构建产物
 *.zip
 *.crx
+!docs/downloads/*.zip
 
 # 系统文件
 .DS_Store

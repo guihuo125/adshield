@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>AdShield 安全验证</title>
+<link rel="icon" href="icons/new-icon.png" />
+<script src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit" async defer></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--ink:#0a0a0a;--ink-2:#3f3f46;--ink-3:#71717a;--line:#e4e4e7;--line-2:#f4f4f5;--paper:#fafafa;--blue:#2563eb;--green:#16a34a;--red:#dc2626}
+body{font-family:-apple-system,BlinkMacSystemFont,"Inter","Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(180deg,#f0f9ff 0%,#fff 100%);padding:24px;color:var(--ink);-webkit-font-smoothing:antialiased}
+.card{background:#fff;border:1px solid var(--line);border-radius:20px;padding:48px 40px;max-width:480px;width:100%;box-shadow:0 4px 12px rgba(0,0,0,.04),0 24px 60px rgba(0,0,0,.08);text-align:center;position:relative;overflow:hidden}
+.card::before{content:"";position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#2563eb,#7c3aed,#16a34a)}
+.logo{width:64px;height:64px;margin:0 auto 20px;filter:drop-shadow(0 8px 20px rgba(22,163,74,.25))}
+h1{font-size:22px;font-weight:700;letter-spacing:-.5px;margin-bottom:10px}
+.sub{font-size:14.5px;color:var(--ink-3);line-height:1.6;margin-bottom:32px}
+.widget-wrap{display:flex;justify-content:center;margin-bottom:24px;min-height:65px}
+.status{padding:12px 16px;border-radius:10px;font-size:14px;line-height:1.6;margin-top:16px;display:none}
+.status.info{background:#eff6ff;color:#1e40af;display:block}
+.status.ok{background:#ecfdf5;color:#065f46;display:block}
+.status.err{background:#fef2f2;color:#991b1b;display:block}
+.status.ok::before{content:"✓ ";font-weight:700}
+.status.err::before{content:"✗ ";font-weight:700}
+.status.info::before{content:"⏳ "}
+.footer{margin-top:32px;padding-top:20px;border-top:1px solid var(--line);font-size:12px;color:var(--ink-3);line-height:1.6}
+.footer a{color:var(--blue);text-decoration:none}
+.loading{display:inline-block;width:16px;height:16px;border:2px solid var(--line);border-top-color:var(--blue);border-radius:50%;animation:spin .8s linear infinite;vertical-align:middle;margin-right:6px}
+@keyframes spin{to{transform:rotate(360deg)}}
+</style>
+</head>
+<body>
+<div class="card">
+  <img src="icons/new-icon.png" class="logo" alt="AdShield" />
+  <h1>安全验证</h1>
+  <p class="sub">AdShield 正在验证您的请求，<br>请完成下方人机验证。</p>
+  <div class="widget-wrap" id="widgetWrap"></div>
+  <div class="status" id="status"></div>
+  <div class="footer">
+    验证通过后会自动返回扩展程序。<br>
+    如遇问题，请回到 AdShield 重试。
+  </div>
+</div>
+<script>
+(function(){
+  var SITE_KEY = "0x4AAAAAAAFQCBXaTIYuaCUyx";
+  var EXT_ID = "gbmgbkgkihcdobchpbmhgldloafnnci";
+
+  // 从 URL 参数读取 action 和 email
+  var params = new URLSearchParams(location.search);
+  var action = params.get("action") || "generic";
+  var email = params.get("email") || "";
+
+  var statusEl = document.getElementById("status");
+  function setStatus(text, type) {
+    statusEl.textContent = text;
+    statusEl.className = "status " + type;
+  }
+
+  // 检查是否从扩展打开（chrome.runtime 可用）
+  var isFromExtension = typeof chrome !== "undefined" && chrome.runtime && chrome.runtime.sendMessage;
+  if (!isFromExtension) {
+    setStatus("请从 AdShield 扩展重新打开此页面", "err");
+    return;
+  }
+
+  // 确认扩展在线
+  var pingOk = false;
+  try {
+    chrome.runtime.sendMessage(EXT_ID, { type: "ping" }, function(resp) {
+      if (chrome.runtime.lastError) {
+        console.warn("ping 失败:", chrome.runtime.lastError.message);
+        return;
+      }
+      if (resp && resp.ok) {
+        pingOk = true;
+        console.log("扩展在线:", resp.name, resp.version);
+      }
+    });
+  } catch (e) {
+    console.warn("ping 异常:", e);
+  }
+
+  // 加载 Turnstile
+  function loadWidget() {
+    if (!window.turnstile) {
+      setStatus("正在加载验证组件，请稍候...", "info");
+      setTimeout(loadWidget, 200);
+      return;
+    }
+    try {
+      window.turnstile.render("#widgetWrap", {
+        sitekey: SITE_KEY,
+        theme: "light",
+        size: "normal",
+        action: action,
+        callback: onSuccess,
+        "error-callback": onError,
+        "expired-callback": onExpired
+      });
+      setStatus("请完成上方人机验证", "info");
+    } catch (e) {
+      setStatus("验证组件加载失败: " + e.message, "err");
+    }
+  }
+
+  function onSuccess(token) {
+    setStatus("验证成功，正在返回扩展...", "info");
+    try {
+      chrome.runtime.sendMessage(EXT_ID, {
+        type: "turnstileToken",
+        token: token,
+        action: action,
+        email: email
+      }, function(resp) {
+        if (chrome.runtime.lastError) {
+          setStatus("返回扩展失败: " + chrome.runtime.lastError.message, "err");
+          return;
+        }
+        if (resp && resp.ok) {
+          setStatus("验证成功！可以关闭此页面", "ok");
+          setTimeout(function() { window.close(); }, 800);
+        } else {
+          setStatus("验证失败: " + (resp && resp.error || "unknown"), "err");
+        }
+      });
+    } catch (e) {
+      setStatus("通信失败: " + e.message, "err");
+    }
+  }
+
+  function onError(errCode) {
+    setStatus("验证出错（错误码 " + errCode + "），请刷新重试", "err");
+  }
+
+  function onExpired() {
+    setStatus("验证已过期，请重新完成", "info");
+    try { window.turnstile.reset(); } catch (e) {}
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener("DOMContentLoaded", loadWidget);
+  } else {
+    loadWidget();
+  }
+})();
+</script>
+</body>
+</html>

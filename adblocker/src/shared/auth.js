@@ -666,6 +666,75 @@
     return data;
   }
 
+  // ===== Turnstile 人机验证（打开官网验证页）=====
+  const TURNSTILE_KEY = "adshield_turnstile";
+  const TURNSTILE_URL = "https://adshield.j3.ink/verify.html";
+
+  async function requestTurnstileToken(action, email) {
+    // 清除旧 token（避免复用）
+    try { await chrome.storage.local.remove(TURNSTILE_KEY); } catch (e) {}
+
+    const params = new URLSearchParams();
+    params.set("action", action);
+    if (email) params.set("email", email);
+    const url = TURNSTILE_URL + "?" + params.toString();
+
+    // 打开新标签
+    let tab;
+    try {
+      tab = await chrome.tabs.create({ url, active: true });
+    } catch (e) {
+      throw new Error("无法打开验证页面");
+    }
+    const tabId = tab.id;
+
+    return new Promise(function (resolve, reject) {
+      const startTime = Date.now();
+      const TIMEOUT = 5 * 60 * 1000;   // 5 分钟
+
+      function cleanup() {
+        try { chrome.storage.local.remove(TURNSTILE_KEY); } catch (e) {}
+      }
+
+      async function check() {
+        // 超时
+        if (Date.now() - startTime > TIMEOUT) {
+          try { chrome.tabs.remove(tabId); } catch (e) {}
+          reject(new Error("验证超时，请重试"));
+          return;
+        }
+
+        // tab 是否还在
+        let tabAlive = true;
+        try {
+          await chrome.tabs.get(tabId);
+        } catch (e) {
+          tabAlive = false;
+        }
+
+        // 检查 token
+        const store = await chrome.storage.local.get(TURNSTILE_KEY);
+        const item = store[TURNSTILE_KEY];
+        if (item && item.token && item.action === action) {
+          cleanup();
+          resolve(item.token);
+          return;
+        }
+
+        // tab 已关但没收到 token → 用户取消
+        if (!tabAlive) {
+          cleanup();
+          reject(new Error("已取消验证"));
+          return;
+        }
+
+        setTimeout(check, 400);
+      }
+
+      check();
+    });
+  }
+
   // ===== 登录 / 注册 =====
   async function doLogin(email, password) {
     // 0) 检查登录锁定
@@ -689,11 +758,25 @@
       return { ok: true, mode: "local" };
     }
 
+    // Turnstile 人机验证
+    let captchaToken = "";
+    try {
+      captchaToken = await requestTurnstileToken("login", email);
+    } catch (e) {
+      const err = new Error(e.message || "人机验证失败");
+      err.code = "CAPTCHA_FAILED";
+      throw err;
+    }
+
     // 真实模式
     try {
+      const loginBody = { email, password };
+      if (captchaToken) {
+        loginBody.gotrue_meta_security = { captcha_token: captchaToken };
+      }
       const data = await sbRequest("/auth/v1/token?grant_type=password", {
         method: "POST",
-        body: JSON.stringify({ email, password })
+        body: JSON.stringify(loginBody)
       });
       // 关键：先写 authState（后续 renderAccount 需要）
       await setAuthState({
@@ -744,9 +827,23 @@
     if (!isSupabaseReady()) {
       return { ok: true, mode: "local", needVerify: false, registered: true, email };
     }
+    // Turnstile 人机验证
+    let captchaToken = "";
+    try {
+      captchaToken = await requestTurnstileToken("register", email);
+    } catch (e) {
+      const err = new Error(e.message || "人机验证失败");
+      err.code = "CAPTCHA_FAILED";
+      throw err;
+    }
+
+    const signupBody = { email, password };
+    if (captchaToken) {
+      signupBody.gotrue_meta_security = { captcha_token: captchaToken };
+    }
     const data = await sbRequest("/auth/v1/signup", {
       method: "POST",
-      body: JSON.stringify({ email, password })
+      body: JSON.stringify(signupBody)
     });
     // 注册成功（无论是否要邮箱验证），返回注册信息，不自动登录
     return {
