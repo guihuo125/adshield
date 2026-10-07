@@ -1530,6 +1530,9 @@ const PRESET_SUBS = {
 const bannerBtn = $("#subUpdateBannerBtn");
 if (bannerBtn) {
   bannerBtn.addEventListener("click", async () => {
+    if (bannerBtn.disabled) return;
+    bannerBtn.disabled = true;
+    bannerBtn.textContent = "更新中...";
     // 触发"立即更新全部"按钮
     const ub = $("#subUpdateAllBtn");
     if (ub) ub.click();
@@ -1554,19 +1557,25 @@ function setBtnState(state, extra) {
   __btnState = state;
   updateAllBtn.classList.remove("loading", "ready");
 
+  // 同步顶部横幅按钮
+  const bannerBtnEl = $("#subUpdateBannerBtn");
+
   switch (state) {
     case "idle":
       updateAllBtn.textContent = "检查更新";
       updateAllBtn.disabled = false;
+      if (bannerBtnEl) { bannerBtnEl.textContent = "检查更新"; bannerBtnEl.disabled = false; }
       break;
     case "checking":
       updateAllBtn.classList.add("loading");
       updateAllBtn.textContent = "检查中...";
       updateAllBtn.disabled = true;
+      if (bannerBtnEl) { bannerBtnEl.textContent = "检查中..."; bannerBtnEl.disabled = true; }
       break;
     case "uptodate":
       updateAllBtn.textContent = "✓ 已是最新";
       updateAllBtn.disabled = true;
+      if (bannerBtnEl) { bannerBtnEl.textContent = "✓ 已是最新"; bannerBtnEl.disabled = true; }
       setTimeout(() => { if (__btnState === "uptodate") setBtnState("idle"); }, 2500);
       break;
     case "ready":
@@ -1574,11 +1583,13 @@ function setBtnState(state, extra) {
       updateAllBtn.classList.add("ready");
       updateAllBtn.textContent = "立即更新（" + __pendingUpdateCount + "）";
       updateAllBtn.disabled = false;
+      if (bannerBtnEl) { bannerBtnEl.textContent = "全部更新（" + __pendingUpdateCount + "）"; bannerBtnEl.disabled = false; }
       break;
     case "updating":
       updateAllBtn.classList.add("loading");
       updateAllBtn.textContent = "更新中...";
       updateAllBtn.disabled = true;
+      if (bannerBtnEl) { bannerBtnEl.textContent = "更新中..."; bannerBtnEl.disabled = true; }
       break;
   }
 }
