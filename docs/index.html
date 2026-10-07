@@ -98,7 +98,9 @@ code{font-family:var(--font-mono);font-size:.88em;padding:1px 6px;background:var
 
 /* Install */
 .install{display:grid;grid-template-columns:repeat(auto-fit,minmax(340px,1fr));gap:24px}
-.inst{border:1px solid var(--line);border-radius:2px;padding:36px 32px;background:#fff;transition:border-color .2s}
+.inst{border:1px solid var(--line);border-radius:2px;padding:36px 32px;background:#fff;transition:border-color .2s;display:flex;flex-direction:column;height:100%}
+.inst>.btn{margin-top:auto;align-self:flex-start}
+.inst ol{flex:1}
 .inst:hover{border-color:var(--ink-4)}
 .inst-h{display:flex;align-items:center;gap:12px;margin-bottom:24px}
 .inst-h .num{font-family:var(--font-mono);font-size:11px;color:#fff;background:var(--ink);padding:3px 9px;border-radius:100px;font-weight:600}
