@@ -157,12 +157,13 @@
       to { opacity: 1; transform: translateY(0); }
     }
     .hero-logo {
-      width: 104px; height: 104px;
+      width: 120px; height: 120px;
       margin: 0 auto 28px;
-      border-radius: 26px;
-      box-shadow: 0 20px 60px rgba(0,174,240,.35), 0 8px 24px rgba(0,174,240,.2);
       animation: floatY 6s ease-in-out infinite;
+      filter: drop-shadow(0 12px 32px rgba(34,197,94,.35)) drop-shadow(0 4px 12px rgba(34,197,94,.2));
+      transition: transform .4s cubic-bezier(0.34, 1.56, 0.64, 1);
     }
+    .hero-logo:hover { transform: scale(1.08) rotate(-4deg); }
     @keyframes floatY {
       0%, 100% { transform: translateY(0); }
       50% { transform: translateY(-10px); }
@@ -554,7 +555,19 @@
 
   <nav class="nav" id="nav">
     <div class="nav-inner">
-      <img src="icons/icon32.png" class="nav-logo" alt="" />
+      <svg class="nav-logo" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="AdShield">
+        <defs>
+          <linearGradient id="navShieldGrad" x1="0" y1="0" x2="0.4" y2="1">
+            <stop offset="0" stop-color="#4ade80"/>
+            <stop offset="1" stop-color="#15803d"/>
+          </linearGradient>
+        </defs>
+        <path d="M60 6 L110 26 L110 66 C110 92 86 110 60 116 C34 110 10 92 10 66 L10 26 Z"
+              fill="url(#navShieldGrad)" stroke="#15803d" stroke-width="4" stroke-linejoin="round"/>
+        <polyline points="40 62, 54 76, 82 46"
+                  stroke="#ffffff" stroke-width="10"
+                  fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
       <span class="nav-name">AdShield</span>
       <div class="nav-links">
         <a href="#features">功能</a>
@@ -574,7 +587,25 @@
         <span class="dot"></span>
         <span>v2.9.76 · 已发布</span>
       </div>
-      <img src="icons/icon128.png" class="hero-logo" alt="AdShield" />
+      <svg class="hero-logo" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg" aria-label="AdShield">
+        <defs>
+          <linearGradient id="shieldGrad" x1="0" y1="0" x2="0.4" y2="1">
+            <stop offset="0" stop-color="#4ade80"/>
+            <stop offset="1" stop-color="#15803d"/>
+          </linearGradient>
+          <linearGradient id="shieldHighlight" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0" stop-color="rgba(255,255,255,.25)"/>
+            <stop offset="1" stop-color="rgba(255,255,255,0)"/>
+          </linearGradient>
+        </defs>
+        <path d="M60 6 L110 26 L110 66 C110 92 86 110 60 116 C34 110 10 92 10 66 L10 26 Z"
+              fill="url(#shieldGrad)" stroke="#15803d" stroke-width="3" stroke-linejoin="round"/>
+        <path d="M60 12 L104 30 L104 66 C104 88 82 104 60 110 C38 104 16 88 16 66 L16 30 Z"
+              fill="url(#shieldHighlight)"/>
+        <polyline points="40 62, 54 76, 82 46"
+                  stroke="#ffffff" stroke-width="9"
+                  fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+      </svg>
       <h1 class="hero-title">轻量、隐私优先的<br><span class="gradient">广告与追踪拦截器</span></h1>
       <p class="hero-sub">
         基于 <strong>Manifest V3</strong> 开发 · 支持规则订阅 · 云同步 · 多设备管理<br>
@@ -766,7 +797,19 @@
   <footer class="footer">
     <div class="footer-inner">
       <div class="footer-brand">
-        <img src="icons/icon32.png" alt="" />
+        <svg width="22" height="22" viewBox="0 0 120 120" fill="none" xmlns="http://www.w3.org/2000/svg">
+          <defs>
+            <linearGradient id="footShieldGrad" x1="0" y1="0" x2="0.4" y2="1">
+              <stop offset="0" stop-color="#4ade80"/>
+              <stop offset="1" stop-color="#15803d"/>
+            </linearGradient>
+          </defs>
+          <path d="M60 6 L110 26 L110 66 C110 92 86 110 60 116 C34 110 10 92 10 66 L10 26 Z"
+                fill="url(#footShieldGrad)" stroke="#15803d" stroke-width="4" stroke-linejoin="round"/>
+          <polyline points="40 62, 54 76, 82 46"
+                    stroke="#ffffff" stroke-width="10"
+                    fill="none" stroke-linecap="round" stroke-linejoin="round"/>
+        </svg>
         <span>© 2026 AdShield · MIT License</span>
       </div>
       <div class="footer-links">
