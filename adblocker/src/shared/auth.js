@@ -2134,10 +2134,10 @@
 
     if (rejected.length) {
       const summary = rejected.map(r => r.field + " 拒绝 " + r.count + " 项（" + r.reason + "）").join("；");
-      console.warn("[AdShield Sync] 云端数据校验：部分项被拒绝 → " + summary);
+      console.log("[AdShield Sync] 云端数据校验：部分项被拒绝 → " + summary);
     }
     if (keptLocal.length) {
-      console.warn("[AdShield Sync] 云端这些字段全部非法，已保留本地原值：" + keptLocal.join("、"));
+      console.log("[AdShield Sync] 云端这些字段全部非法，已保留本地原值：" + keptLocal.join("、"));
     }
     return { applied: applied, rejected: rejected, keptLocal: keptLocal };
   }
@@ -2231,7 +2231,7 @@
         }
       }
     } catch (e) {
-      console.warn("[AdShield Sync] 检查云端失败:", e);
+      console.log("[AdShield Sync] 检查云端失败:", e);
     }
   }
 
