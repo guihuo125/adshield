@@ -431,7 +431,10 @@ html[data-theme="dark"] .stat-icon-total { background: rgba(25,179,22,.18); }
   max-height: calc(100vh - 24px);
   overflow-y: auto;
   padding: 14px;
+  scrollbar-width: none;          /* 隐藏滚动条，滚轮和触摸照常 */
+  -ms-overflow-style: none;
 }
+.menu-panel::-webkit-scrollbar { display: none; }
 .menu-header {
   display: flex; align-items: center; justify-content: space-between;
   margin-bottom: 12px;
