@@ -2,7 +2,7 @@
 
 > 轻量、隐私优先的广告与追踪拦截扩展，基于 Manifest V3 开发。
 
-[![Version](https://img.shields.io/badge/version-2.9.92-blue)]()
+[![Version](https://img.shields.io/badge/version-2.9.93-blue)]()
 [![Manifest](https://img.shields.io/badge/Manifest-V3-green)]()
 [![License](https://img.shields.io/badge/license-MIT-orange)]()
 
@@ -36,10 +36,10 @@
 
 [![Edge 商店](https://img.shields.io/badge/Edge-商店-blue?logo=microsoftedge)](https://microsoftedge.microsoft.com/addons/detail/ogjodahjklhodkmnjhopkopflngicokg)
 
-> 💡 **商店版本 v2.0.0**（以商店页面显示为准），GitHub 最新 Release 为 **v2.9.92**。
+> 💡 **商店版本 v2.0.0**（以商店页面显示为准），GitHub 最新 Release 为 **v2.9.93**。
 >
 > 想体验最新功能 → 用下方「开发者模式加载」安装 zip，
-> 或下载 Release 中的 `adblocker-v2.9.92.zip` / `adblocker-v2.9.92.crx`。
+> 或下载 Release 中的 `adblocker-v2.9.93.zip` / `adblocker-v2.9.93.crx`。
 
 ### 开发者模式加载
 

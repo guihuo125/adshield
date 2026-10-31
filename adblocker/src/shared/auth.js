@@ -2047,8 +2047,10 @@
         const n = Number(v);
         if (Number.isFinite(n) && n >= 0 && n <= 168) res.settings.subscriptionInterval = n;
         else res.rejected++;
-      } else {
+      } else if (typeof v === "boolean") {
         res.settings[k] = v;   // enabled / antiDetect / assist / showBadge
+      } else {
+        res.rejected++;        // 非布尔值一律拒绝，避免 "yes" 之类的字符串写进开关
       }
     }
     return res;
@@ -2089,15 +2091,34 @@
 
     const store = await chrome.storage.local.get(["adshield_settings"]);
     const s = store.adshield_settings || {};
+    // 云端某个字段"有内容但校验后一个都不剩"时保留本地原值：
+    // 否则一条全非法的行就能把用户的白名单/规则/订阅清空。
+    // 云端确实是空数组（用户主动清空）时仍照常覆盖。
+    const wiped = (arr, keptCount) => Array.isArray(arr) && arr.length > 0 && keptCount === 0;
+    const keptLocal = [];
     Object.assign(s, stRes.settings);                                   // settings（仅白名单键）
     if (cloud.whitelist && typeof cloud.whitelist === "object") {        // 仅当云端提供时才覆盖
-      s.disabledSites = wlRes.disabledSites;
-      s.pausedUntil = wlRes.pausedUntil;
+      if (wiped(cloud.whitelist.disabledSites, wlRes.disabledSites.length)) {
+        keptLocal.push("disabledSites");
+      } else {
+        s.disabledSites = wlRes.disabledSites;
+      }
+      const pin = cloud.whitelist.pausedUntil;
+      const pinCount = (pin && typeof pin === "object") ? Object.keys(pin).length : 0;
+      if (pinCount > 0 && Object.keys(wlRes.pausedUntil).length === 0) {
+        keptLocal.push("pausedUntil");
+      } else {
+        s.pausedUntil = wlRes.pausedUntil;
+      }
     }
-    if (Array.isArray(cloud.subscriptions)) s.subscriptions = subsRes.list;
+    if (Array.isArray(cloud.subscriptions)) {
+      if (wiped(cloud.subscriptions, subsRes.list.length)) keptLocal.push("subscriptions");
+      else s.subscriptions = subsRes.list;
+    }
     await chrome.storage.local.set({ adshield_settings: s });
     if (Array.isArray(cloud.user_rules)) {                               // 写入的是校验后的值
-      await chrome.storage.local.set({ adshield_user_rules: rulesRes.list });
+      if (wiped(cloud.user_rules, rulesRes.list.length)) keptLocal.push("user_rules");
+      else await chrome.storage.local.set({ adshield_user_rules: rulesRes.list });
     }
 
     const applied =
@@ -2115,7 +2136,10 @@
       const summary = rejected.map(r => r.field + " 拒绝 " + r.count + " 项（" + r.reason + "）").join("；");
       console.warn("[AdShield Sync] 云端数据校验：部分项被拒绝 → " + summary);
     }
-    return { applied: applied, rejected: rejected };
+    if (keptLocal.length) {
+      console.warn("[AdShield Sync] 云端这些字段全部非法，已保留本地原值：" + keptLocal.join("、"));
+    }
+    return { applied: applied, rejected: rejected, keptLocal: keptLocal };
   }
 
   // ===== 自动上传（防抖 5 秒）=====
