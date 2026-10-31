@@ -412,6 +412,7 @@
     let state;
     if (sess.valid) {
       state = await getAuthState();
+      touchActivity();   // 打开账号面板算一次活跃
     } else {
       state = null;
       if (sess.reason === "expired") {
@@ -621,12 +622,33 @@
     const state = await getAuthState();
     if (!state) return { valid: false, reason: "not-logged-in" };
     if (state.mode === "local") return { valid: true };
-    const loginAt = state.loginAt || 0;
-    if (loginAt && Date.now() - loginAt > SESSION_MAX_AGE) {
+    // 判的是「多久没活跃」，不是「登录多久了」。登录后一直在用就不该被登出。
+    // lastActiveAt 由 touchActivity 维护，lastSyncAt 每次同步成功都会更新。
+    const lastActive = Math.max(
+      state.lastActiveAt || 0,
+      state.lastSyncAt || 0,
+      state.lastCloudAppliedAt || 0,
+      state.loginAt || 0
+    );
+    if (!lastActive) return { valid: true };
+    if (Date.now() - lastActive > SESSION_MAX_AGE) {
       await doLogout();
       return { valid: false, reason: "expired" };
     }
     return { valid: true };
+  }
+
+  // 记录一次「用户在用扩展」，6 小时最多写一次 storage
+  let __lastTouchWrite = 0;
+  async function touchActivity() {
+    const state = await getAuthState();
+    if (!state || state.mode === "local") return;
+    const now = Date.now();
+    if (now - __lastTouchWrite < 6 * 60 * 60 * 1000) return;
+    __lastTouchWrite = now;
+    try {
+      await setAuthState(Object.assign({}, state, { lastActiveAt: now }));
+    } catch (e) {}
   }
 
   // ===== 登录尝试日志 =====
@@ -686,14 +708,8 @@
     }
 
     if (!isSupabaseReady()) {
-      // 本地模式：直接假登录
-      await setAuthState({
-        email,
-        token: "local-" + Date.now(),
-        loginAt: Date.now(),
-        mode: "local"
-      });
-      return { ok: true, mode: "local" };
+      // 账号服务未配置时直接失败，不再伪造本地登录（那会让任意密码都能"登录成功"）
+      throw new Error("账号服务未配置，无法登录");
     }
 
     // 真实模式
@@ -749,7 +765,7 @@
     }
     // 注册后不自动登录（让用户手动登录）
     if (!isSupabaseReady()) {
-      return { ok: true, mode: "local", needVerify: false, registered: true, email };
+      throw new Error("账号服务未配置，无法注册");
     }
     const data = await sbRequest("/auth/v1/signup", {
       method: "POST",
@@ -795,7 +811,7 @@
 
   // ===== 验证原密码（用登录 API 试一次）=====
   async function verifyPassword(email, password) {
-    if (!isSupabaseReady()) return true;   // 本地模式直接通过
+    if (!isSupabaseReady()) return false;   // 服务未配置时不能放行，宁可拒绝
     try {
       await sbRequest("/auth/v1/token?grant_type=password", {
         method: "POST",
@@ -1859,7 +1875,36 @@
   }
 
   // 上传到云端（走 401→刷新→重试一次的路径）
-  async function pushToCloud(token, userId) {
+  // 只取云端的 updated_at，用于上传前判断是否被别的设备改过
+  async function fetchCloudUpdatedAt(token, userId) {
+    const url = SUPABASE_URL + SUPABASE_TABLE + "?user_id=eq." + userId + "&select=updated_at";
+    const resp = await withAuthRetry((tk) => fetch(url, {
+      headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": "Bearer " + tk }
+    }), token);
+    if (!resp.ok) return 0;
+    const rows = await resp.json().catch(() => null);
+    if (!Array.isArray(rows) || !rows.length || !rows[0].updated_at) return 0;
+    return new Date(rows[0].updated_at).getTime() || 0;
+  }
+
+  async function pushToCloud(token, userId, opts) {
+    // 自动上传前先看云端有没有被别的设备改过，避免整行覆盖别人的改动。
+    // 手动点「上传到云端」时传 force 跳过这项检查。
+    if (!(opts && opts.force)) {
+      try {
+        const remoteTime = await fetchCloudUpdatedAt(token, userId);
+        const st = await getAuthState();
+        const localBase = Math.max((st && st.lastSyncAt) || 0, (st && st.lastCloudAppliedAt) || 0);
+        if (remoteTime && localBase && remoteTime - localBase > 60000) {
+          const err = new Error("云端有更新的配置，已跳过自动上传");
+          err.code = "CLOUD_NEWER";
+          throw err;
+        }
+      } catch (e) {
+        if (e && e.code === "CLOUD_NEWER") throw e;
+        // 探测失败（网络等）不阻塞正常上传
+      }
+    }
     const data = await collectLocalData();
     const body = JSON.stringify({
       user_id: userId,
@@ -1910,25 +1955,33 @@
   let __authExpiredWarnAt = 0;
 
   // 用 refresh_token 换取新 access token，成功写回 storage
+  // 用 refresh_token 换取新 access token，成功写回 storage。
+  // refresh_token 是一次性的（服务端轮换），并发刷新时第二个必然失败并误报「登录已过期」，
+  // 所以用单例 Promise 让并发的 401 共享同一次刷新。
+  let __refreshPromise = null;
   async function refreshAccessToken() {
-    const state = await getAuthState();
-    if (!state || !state.refreshToken) return false;
-    try {
-      const r = await fetch(SUPABASE_URL + "/auth/v1/token?grant_type=refresh_token", {
-        method: "POST",
-        headers: { "apikey": SUPABASE_ANON_KEY, "Content-Type": "application/json" },
-        body: JSON.stringify({ refresh_token: state.refreshToken })
-      });
-      if (!r.ok) return false;
-      const d = await r.json();
-      if (!d || !d.access_token) return false;
-      const st = await getAuthState();
-      if (st) await setAuthState(Object.assign({}, st, {
-        token: d.access_token,
-        refreshToken: d.refresh_token || st.refreshToken
-      }));
-      return true;
-    } catch (e) { return false; }
+    if (__refreshPromise) return __refreshPromise;
+    __refreshPromise = (async () => {
+      const state = await getAuthState();
+      if (!state || !state.refreshToken) return false;
+      try {
+        const r = await fetch(SUPABASE_URL + "/auth/v1/token?grant_type=refresh_token", {
+          method: "POST",
+          headers: { "apikey": SUPABASE_ANON_KEY, "Content-Type": "application/json" },
+          body: JSON.stringify({ refresh_token: state.refreshToken })
+        });
+        if (!r.ok) return false;
+        const d = await r.json();
+        if (!d || !d.access_token) return false;
+        const st = await getAuthState();
+        if (st) await setAuthState(Object.assign({}, st, {
+          token: d.access_token,
+          refreshToken: d.refresh_token || st.refreshToken
+        }));
+        return true;
+      } catch (e) { return false; }
+    })();
+    try { return await __refreshPromise; } finally { __refreshPromise = null; }
   }
 
   // 刷新彻底失败：必须让用户看见（showAlert + 触发已存在的 auth-changed 事件）
@@ -2145,10 +2198,11 @@
   // ===== 自动上传（防抖 5 秒）=====
   let __autoUploadTimer = 0;
   let __autoUploadLast = 0;
+  let __autoUploadRetry = 0;
   async function autoUpload() {
     const state = await getAuthState();
     if (!state || state.mode === "local" || !state.token || !state.userId) return;
-    // 5 秒内避免重复上传
+    // 3 秒内的重复触发合并掉
     const now = Date.now();
     if (now - __autoUploadLast < 3000) return;
     __autoUploadLast = now;
@@ -2158,7 +2212,21 @@
       // 显示轻提示（右下角）
       showSyncToast("已自动同步到云端");
     } catch (e) {
+      // 失败不占住节流位，否则接下来 3 秒内的改动会被静默吞掉
+      __autoUploadLast = 0;
+      if (e && e.code === "CLOUD_NEWER") {
+        console.log("[AdShield Sync] 云端更新，跳过本次自动上传");
+        showSyncToast("云端有更新，本次改动未上传");
+        return;   // 冲突不自动重试，等用户在账号页处理
+      }
       console.warn("[AdShield Sync] 自动上传失败:", e);
+      // 30 秒后重试一次，避免改完没换设备就永远不同步
+      if (!__autoUploadRetry) {
+        __autoUploadRetry = setTimeout(() => {
+          __autoUploadRetry = 0;
+          autoUpload().catch(() => {});
+        }, 30000);
+      }
     }
   }
 
@@ -2261,9 +2329,9 @@
       const userId = state.userId;
       if (!userId) throw new Error("缺少用户 ID");
 
-      // push：上传本地到云端
+      // push：上传本地到云端（用户手动点的，force 跳过冲突检查）
       if (direction === "push" || direction === "both") {
-        await pushToCloud(token, userId);
+        await pushToCloud(token, userId, { force: true });
       }
       // pull：从云端拉取（both 时不覆盖本地，先 push 后 pull 会拿到自己数据）
       if (direction === "pull") {
