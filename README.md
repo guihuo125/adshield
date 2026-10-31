@@ -2,7 +2,7 @@
 
 > 轻量、隐私优先的广告与追踪拦截扩展，基于 Manifest V3 开发。
 
-[![Version](https://img.shields.io/badge/version-2.9.70-blue)]()
+[![Version](https://img.shields.io/badge/version-2.9.92-blue)]()
 [![Manifest](https://img.shields.io/badge/Manifest-V3-green)]()
 [![License](https://img.shields.io/badge/license-MIT-orange)]()
 
@@ -36,9 +36,10 @@
 
 [![Edge 商店](https://img.shields.io/badge/Edge-商店-blue?logo=microsoftedge)](https://microsoftedge.microsoft.com/addons/detail/ogjodahjklhodkmnjhopkopflngicokg)
 
-> 💡 **商店版本 v2.0.0**，最新版 v2.9.70 正在审核/待发布。
+> 💡 **商店版本 v2.0.0**（以商店页面显示为准），GitHub 最新 Release 为 **v2.9.92**。
 >
-> 想体验最新功能 → 用下方「开发者模式加载」安装 zip，或下载 GitHub Release 中的 `adblocker-v2.9.70.zip`。
+> 想体验最新功能 → 用下方「开发者模式加载」安装 zip，
+> 或下载 Release 中的 `adblocker-v2.9.92.zip` / `adblocker-v2.9.92.crx`。
 
 ### 开发者模式加载
 
@@ -101,7 +102,7 @@ example.com##.ad        元素隐藏（仅该站）
 
 在「设置 → 账号」中：
 
-1. **注册/登录**：使用邮箱 + 密码（≥6 位）
+1. **注册/登录**：使用邮箱 + 密码（至少 8 位，须含大写字母，拒绝常见弱密码）
 2. **云同步**：勾选需要同步的项目（基础设置 / 白名单 / 自定义规则 / 订阅）
 3. **多设备**：登录后自动上报设备信息（操作系统 + 浏览器）
 4. **数据备份**：导出/导入 JSON 文件，可手动备份或迁移
@@ -114,7 +115,7 @@ example.com##.ad        元素隐藏（仅该站）
 
 - ✅ **默认所有数据存储于本地浏览器**，不上传任何信息
 - ✅ **不收集任何用户数据**（无埋点、无分析、无遥测）
-- ✅ **不发起任何网络请求**（除用户主动添加的规则订阅外）
+- ✅ **不上传您的浏览数据**；联网只发生在三处：首次安装自带的 4 个规则订阅源定时更新（可在设置里关闭或调间隔）、您主动添加的订阅拉取、以及登录后的 Supabase 同步
 - ✅ **不使用远程代码**（所有 JS 随扩展打包）
 - ⚠️ **可选账号功能**：仅在用户**主动注册/登录**后，才会将以下数据同步到 Supabase 云端：
   - 邮箱（仅用于登录，不用于营销）
@@ -135,8 +136,8 @@ example.com##.ad        元素隐藏（仅该站）
 
 ```
 adblocker/
-├── manifest.json          # 扩展配置（MV3 + i18n）
-├── _locales/              # 多语言
+├── manifest.json          # 扩展配置（Manifest V3）
+├── _locales/              # 仅本地化「扩展名称 + 描述」，界面文案目前为中文
 │   ├── zh_CN/
 │   └── en/
 ├── icons/                 # 图标（16/32/48/128）
@@ -156,9 +157,10 @@ adblocker/
     │   ├── modal.js       # 自定义弹窗
     │   └── modal.css
     └── content/
-        ├── cosmetic.js    # 元素隐藏 + 浏览助手
-        ├── anti-detect.js # 反拦截检测规避
-        └── picker.js      # 元素拾取器
+        ├── cosmetic.js          # 元素隐藏 + 浏览助手（隔离世界）
+        ├── anti-detect.js       # 诱饵样式与 DOM 监控（隔离世界）
+        ├── anti-detect-main.js  # 全局变量伪装与检测回报（页面主世界）
+        └── picker.js            # 元素拾取器
 ```
 
 ## ❓ 常见问题
@@ -177,11 +179,13 @@ A: 统计功能依赖浏览器的 `declarativeNetRequestFeedback` API。在开�
 
 **Q4: 为什么拦截数很高（如某网站 60 条）？**
 
-A: 统计为**累计值**（多次访问总和），且会统计：
+A: 统计为**累计值**（多次访问总和），计入总数的有：
 - 广告请求
 - 追踪/埋点上报
-- URL 参数清理
 - 干扰内容
+- 恶意域名
+
+URL 参数清理是重定向而非拦截，**不计入总数**，但会单独出现在分类占比里。
 
 国内大型站点（如 B站首页）单次访问就有 30~60 个埋点上报，属正常。
 

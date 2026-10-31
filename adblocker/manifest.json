@@ -1,7 +1,8 @@
 {
   "manifest_version": 3,
+  "minimum_chrome_version": "114",
   "name": "__MSG_extensionName__",
-  "version": "2.9.90",
+  "version": "2.9.92",
   "description": "__MSG_extensionDescription__",
   "default_locale": "zh_CN",
   "permissions": [
@@ -55,12 +56,32 @@
       ],
       "js": [
         "src/content/cosmetic.js",
-        "src/content/anti-detect.js",
-        "src/content/picker.js"
+        "src/content/anti-detect.js"
       ],
       "run_at": "document_start",
       "all_frames": true,
       "match_about_blank": true
+    },
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "src/content/picker.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": false
+    },
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "src/content/anti-detect-main.js"
+      ],
+      "run_at": "document_start",
+      "all_frames": true,
+      "world": "MAIN"
     }
   ],
   "icons": {

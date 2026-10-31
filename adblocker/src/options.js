@@ -1526,8 +1526,8 @@ if (subAddBtn) {
 // 预置订阅
 const PRESET_SUBS = {
   "easylist-cn":    { url: "https://easylist-downloads.adblockplus.org/easylistchina.txt", name: "EasyList China", desc: "网站广告规则 · 约 18000 条" },
-  "cjx-annoyance":  { url: "https://raw.githubusercontent.com/cjx82630/cjxlist/master/cjx-annoyance.txt", name: "CJX Annoyance", desc: "扰民元素过滤 · 约 1800 条" },
-  "adguard-cn":     { url: "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_224_Chinese/filter.txt", name: "AdGuard CN", desc: "AdGuard 官方中文规则 · 约 21000 条" },
+  "fanboy-annoyance": { url: "https://easylist-downloads.adblockplus.org/fanboy-annoyance.txt", name: "Fanboy Annoyance", desc: "扰民元素过滤 · 官方维护" },
+  "adguard-cn":     { url: "https://filters.adtidy.org/extension/ublock/filters/224.txt", name: "AdGuard CN", desc: "AdGuard 官方中文规则 · 约 21000 条" },
   "easyprivacy":    { url: "https://easylist.to/easylist/easyprivacy.txt", name: "EasyPrivacy", desc: "全球追踪器规则 · 约 56000 条" },
   "adrules-lite":   { url: "https://bitbucket.org/hacamer/adrules/raw/main/adblock_lite.txt", name: "AdRules 精简版", desc: "中国地区广告屏蔽 · 3w+ 条 · 移动优化" }
 };

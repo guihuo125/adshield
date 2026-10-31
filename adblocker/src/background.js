@@ -5,6 +5,11 @@ const SETTINGS_KEY = "adshield_settings";
 
 // 内存中的统计缓冲（供 badge 实时读取，避免 storage 写盘延迟）
 let __statsBuffer = null;
+// 统计可用性标记：onRuleMatchedDebug 只在"开发者模式加载的未打包扩展"中触发，
+// 正式安装版该事件永不触发。live 供 popup/logger 判断是否显示降级提示。
+let __statsLive = false;
+// 用户规则应用防抖定时器（合并短时间内的多次变更）
+let __userRulesApplyTimer = 0;
 
 const DEFAULT_SETTINGS = {
   enabled: true,
@@ -30,6 +35,13 @@ async function getSettings() {
   s.rulesets = Object.assign({}, DEFAULT_SETTINGS.rulesets, s.rulesets || {});
   s.pausedUntil = s.pausedUntil || {};
   s.disabledSites = s.disabledSites || [];
+  // 规范化订阅 ID：必须落在 1~99（防御历史脏数据导致 id%100===0 的 ID 段冲突）
+  if (Array.isArray(s.subscriptions)) {
+    for (const sub of s.subscriptions) {
+      const m = ((Number(sub.id) || 0) % 100);
+      sub.id = (m >= 1 && m <= 99) ? m : 1;
+    }
+  }
   return s;
 }
 
@@ -142,20 +154,7 @@ chrome.alarms.onAlarm.addListener((a) => {
 //   annoyances — 干扰内容
 //   url_clean  — URL 参数清理
 //   malware    — 恶意域名
-function getRootDomain(host) {
-  if (!host) return "";
-  const parts = String(host).toLowerCase().split(".");
-  if (parts.length <= 2) return parts.join(".");
-  // 常见多段顶级域
-  const twoPartTlds = ["co", "com", "net", "org", "gov", "edu", "ac", "mil"];
-  const second = parts[parts.length - 2];
-  if (twoPartTlds.includes(second) && parts.length >= 3) {
-    return parts.slice(-3).join(".");
-  }
-  return parts.slice(-2).join(".");
-}
-
-// 常见第三方追踪服务（跨站追踪器，明确列表）
+  // 常见第三方追踪服务（跨站追踪器，明确列表）
 const THIRD_PARTY_TRACKERS = [
   "google-analytics.com", "googletagmanager.com", "doubleclick.net",
   "hotjar.com", "amplitude.com", "mixpanel.com", "segment.com", "segment.io",
@@ -271,6 +270,21 @@ async function updateBadgeForTab(tabId) {
 /* ============ 用户自定义规则 ============ */
 const USER_RULE_BASE = 100000;
 
+// ABP 修饰符 -> Chrome DNR 资源类型
+const RULE_TYPE_MAP = {
+  script: "script", image: "image", stylesheet: "stylesheet",
+  xmlhttprequest: "xmlhttprequest", subdocument: "sub_frame",
+  media: "media", font: "font", ping: "ping", other: "other",
+  object: "object", websocket: "websocket", main_frame: "main_frame"
+};
+// 不支持的修饰符：出现即整条跳过（宁可少拦，不可误拦）
+const RULE_UNSUPPORTED_MODS = new Set([
+  "document", "popup", "elemhide", "genericblock", "csp", "rewrite",
+  "removeparam", "redirect", "removeheader", "third-party", "3p",
+  "first-party", "1p", "match-case", "badfilter", "webrtc", "sitekey",
+  "important", "all"
+]);
+
 function parseRuleLine(rawLine, id) {
   let line = (rawLine || "").trim();
   if (!line) return { skip: "空行" };
@@ -286,25 +300,58 @@ function parseRuleLine(rawLine, id) {
     line = line.slice(2).trim();
   }
 
+  // 拆分修饰符：||example.com^$script,image（$ 后必须全是合法修饰符字符才算）
+  let body = line;
+  let mods = "";
+  const dollarIdx = line.lastIndexOf("$");
+  if (dollarIdx > 0) {
+    const after = line.slice(dollarIdx + 1);
+    if (/^[a-z0-9,|~_\-]+$/i.test(after)) {
+      mods = after.toLowerCase();
+      body = line.slice(0, dollarIdx);
+    }
+  }
+
+  // 修饰符处理：不支持的整条跳过；支持的类型映射到 resourceTypes/excludedResourceTypes
+  let resourceTypes, excludedResourceTypes;
+  if (mods) {
+    const parts = mods.split(",").filter(Boolean);
+    if (parts.some(p => RULE_UNSUPPORTED_MODS.has(p.replace(/^~/, "")))) {
+      return { skip: "不支持的修饰符: $" + mods };
+    }
+    const neg = parts.filter(p => p.startsWith("~")).map(p => p.slice(1));
+    const pos = parts.filter(p => !p.startsWith("~"));
+    if (pos.length) resourceTypes = pos.map(p => RULE_TYPE_MAP[p]).filter(Boolean);
+    if (neg.length) excludedResourceTypes = neg.map(p => RULE_TYPE_MAP[p]).filter(Boolean);
+  }
+
+  function buildCondition(extra) {
+    const cond = Object.assign({ excludedResourceTypes: ["main_frame"] }, extra);
+    if (resourceTypes) cond.resourceTypes = resourceTypes;
+    if (excludedResourceTypes) cond.excludedResourceTypes = cond.excludedResourceTypes.concat(excludedResourceTypes);
+    return cond;
+  }
+
   // 域名规则：||example.com^
-  const m1 = line.match(/^\|\|([a-zA-Z0-9_.*-]+)\^?\$?/);
+  const m1 = body.match(/^\|\|([a-zA-Z0-9_.*-]+)\^?$/);
   if (m1) {
     const domain = m1[1].replace(/^\*\./, "");  // 去掉前导 *.
+    if (!domain || domain.includes("*")) return { skip: "域名无效: " + line };
     return {
       id,
       priority: isException ? 100 : 2,
       action: { type: isException ? "allow" : "block" },
-      condition: { requestDomains: [domain], excludedResourceTypes: ["main_frame"] }
+      condition: buildCondition({ requestDomains: [domain] })
     };
   }
 
   // 路径片段：/ads/
-  if (line.startsWith("/")) {
+  if (body.startsWith("/")) {
     return {
       id,
       priority: isException ? 100 : 2,
       action: { type: isException ? "allow" : "block" },
-      condition: { urlFilter: line, excludedResourceTypes: ["main_frame"] }
+      condition: buildCondition({ urlFilter: body })
     };
   }
 
@@ -313,7 +360,7 @@ function parseRuleLine(rawLine, id) {
     id,
     priority: isException ? 100 : 2,
     action: { type: isException ? "allow" : "block" },
-    condition: { urlFilter: line, excludedResourceTypes: ["main_frame"] }
+    condition: buildCondition({ urlFilter: body })
   };
 }
 
@@ -376,8 +423,8 @@ const SUB_RULE_BASE = 300000;   // 订阅规则 ID 段（300000~399999）
 /* ============ 默认订阅源（首次安装自动订阅） ============ */
 const DEFAULT_SUBSCRIPTIONS = [
   { url: "https://easylist-downloads.adblockplus.org/easylistchina.txt", name: "EasyList China" },
-  { url: "https://raw.githubusercontent.com/AdguardTeam/FiltersRegistry/master/filters/filter_224_Chinese/filter.txt", name: "AdGuard CN" },
-  { url: "https://raw.githubusercontent.com/cjx82630/cjxlist/master/cjx-annoyance.txt", name: "CJX Annoyance" },
+  { url: "https://filters.adtidy.org/extension/ublock/filters/224.txt", name: "AdGuard CN" },
+  { url: "https://easylist-downloads.adblockplus.org/fanboy-annoyance.txt", name: "Fanboy Annoyance" },
   { url: "https://easylist.to/easylist/easyprivacy.txt", name: "EasyPrivacy" }
 ];
 
@@ -839,13 +886,13 @@ function handleOtherMessage(msg, sender, sendResponse) {
       } else if (msg && msg.type === "getStats") {
         // 若内存缓冲存在，直接返回（实时）；否则从 storage 读
         if (__statsBuffer) {
-          sendResponse(__statsBuffer);
+          sendResponse(Object.assign({}, __statsBuffer, { live: __statsLive }));
         } else {
           const store = await chrome.storage.local.get(STATS_KEY);
           const stats = store[STATS_KEY] || { total: 0, byPage: {}, byBlocked: {}, byCategory: {}, byDate: {}, byHour: {}, recentLogs: [] };
           // 同时填充内存缓冲，避免后续每次都读 storage
           __statsBuffer = stats;
-          sendResponse(stats);
+          sendResponse(Object.assign({}, stats, { live: __statsLive }));
         }
       } else if (msg && msg.type === "resetStats") {
         const blank = { total: 0, byPage: {}, byBlocked: {}, byCategory: {}, byDate: {}, byHour: {}, recentLogs: [] };
@@ -856,9 +903,18 @@ function handleOtherMessage(msg, sender, sendResponse) {
         const store = await chrome.storage.local.get("adshield_user_rules");
         sendResponse(store.adshield_user_rules || []);
       } else if (msg && msg.type === "saveUserRules") {
-        await chrome.storage.local.set({ "adshield_user_rules": msg.rules || [] });
-        const result = await applyUserRules(msg.rules || []);
-        sendResponse({ ok: true, result });
+        // 值变化时由 storage.onChanged 统一触发应用（避免双写导致 updateDynamicRules 竞态）；
+        // 值未变化时 onChanged 不会触发，手动应用一次保证幂等（用户强制重刷场景）。
+        const next = msg.rules || [];
+        const prev = (await chrome.storage.local.get("adshield_user_rules")).adshield_user_rules || [];
+        const changed = JSON.stringify(prev) !== JSON.stringify(next);
+        await chrome.storage.local.set({ "adshield_user_rules": next });
+        if (changed) {
+          sendResponse({ ok: true });
+        } else {
+          const result = await applyUserRules(next);
+          sendResponse({ ok: true, result });
+        }
       } else if (msg && msg.type === "getSubscriptions") {
         sendResponse({ ok: true, subscriptions: s.subscriptions || [], interval: s.subscriptionInterval || 24, lastCheck: s.lastSubscriptionCheck || 0 });
       } else if (msg && msg.type === "saveSubscription") {
@@ -1164,6 +1220,16 @@ function handleOtherMessage(msg, sender, sendResponse) {
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // 浏览助手：自动暂停该站点
   if (msg && msg.type === "assistDetected" && msg.host) {
+    // msg.host 必须与发送方所在标签页一致，否则页面可伪造 host 暂停任意站点
+    const senderHost = (() => {
+      if (!sender || !sender.tab || !sender.tab.url) return "";
+      try { return new URL(sender.tab.url).hostname; } catch (e) { return ""; }
+    })();
+    if (senderHost && senderHost !== msg.host) {
+      console.warn("[AdShield 浏览助手] 已拒绝：host 与来源标签页不符", msg.host, "≠", senderHost);
+      sendResponse({ ok: false, reason: "host-mismatch" });
+      return true;
+    }
     (async () => {
       try {
         const s = await getSettings();
@@ -1297,6 +1363,13 @@ async function scheduleSubscriptionCheck() {
 }
 
 chrome.alarms.onAlarm.addListener(async (a) => {
+  if (a.name === "adshield-first-sub-fetch") {
+    await chrome.alarms.clear("adshield-first-sub-fetch");
+    updateAllSubscriptions().catch((e) => {
+      console.warn("[AdShield] 首次订阅拉取失败：", e);
+    });
+    return;
+  }
   if (a.name === "adshield-sub-update") {
     console.log("[AdShield] 定时器触发：开始更新订阅");
     await updateAllSubscriptions();
@@ -1332,13 +1405,9 @@ chrome.runtime.onInstalled.addListener(async (details) => {
   await scheduleSubscriptionCheck();
   await cleanupOrphanSubscriptions();
 
-  // ===== 首次安装：延迟 2 秒后自动拉取订阅（避免阻塞浏览器启动） =====
+  // ===== 首次安装：用 alarm 延迟拉取订阅（MV3 SW 的 setTimeout 可能因挂起而丢失） =====
   if (needFetchDefaults) {
-    setTimeout(() => {
-      updateAllSubscriptions().catch((e) => {
-        console.warn("[AdShield] 首次订阅拉取失败：", e);
-      });
-    }, 2000);
+    chrome.alarms.create("adshield-first-sub-fetch", { delayInMinutes: 0.5 });
   } else {
     // 非首次：立即更新（若已有订阅）
     updateAllSubscriptions().catch(() => {});
@@ -1365,7 +1434,11 @@ chrome.storage.onChanged.addListener((changes, area) => {
     }).catch(() => {});
   }
   if (changes.adshield_user_rules) {
-    applyUserRules(changes.adshield_user_rules.newValue || []);
+    // 防抖：合并短时间内的多次变更，避免 updateDynamicRules 并发竞态
+    clearTimeout(__userRulesApplyTimer);
+    __userRulesApplyTimer = setTimeout(() => {
+      applyUserRules(changes.adshield_user_rules.newValue || []).catch(() => {});
+    }, 300);
   }
 });
 
@@ -1483,6 +1556,7 @@ async function maybeNotifyBlocked(tabId, pageHost, count) {
 if (chrome.declarativeNetRequest.onRuleMatchedDebug) {
   console.log("[AdShield] onRuleMatchedDebug 已注册");
   chrome.declarativeNetRequest.onRuleMatchedDebug.addListener(async (info) => {
+    if (!__statsLive) __statsLive = true;   // 事件能触发 => 开发者模式，统计可用
     const blockedHost = (() => {
       try { return new URL(info.request.url).hostname; } catch (e) { return ""; }
     })();

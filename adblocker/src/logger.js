@@ -32,6 +32,8 @@ async function load() {
   $("#totalCount").textContent = stats.total || 0;
   allLogs = (stats.recentLogs || []).slice().reverse();
   $("#logCount").textContent = allLogs.length;
+  const note = $("#statsNote");
+  if (note) note.hidden = stats.live !== false;
   render();
 }
 

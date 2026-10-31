@@ -120,42 +120,63 @@
         for (const sel of rule.selectors) parts.push(sel + "{display:none !important;}");
       }
     }
-    // 用户自定义的 ## 选择器（已过滤到当前站点）
-    if (Array.isArray(userSelectors)) {
-      for (const sel of userSelectors) parts.push(sel + "{display:none !important;}");
+    // 用户自定义的 ## 选择器（已过滤到当前站点），#@# 例外剔除
+    if (userSelectors && userSelectors.hide) {
+      const except = userSelectors.except || new Set();
+      for (const sel of userSelectors.hide) {
+        if (except.has(sel)) continue;
+        parts.push(sel + "{display:none !important;}");
+      }
     }
     return parts.join("\n");
   }
 
-  // 从用户规则中筛选出适用于当前站点的 ## 规则
+  // 从用户规则中筛选出适用于当前站点的 ## / #@# 规则
   // 语法：example.com##.ad  /  example.com,*.foo.com##.ad  /  ##.ad（全局）
+  // 例外：example.com#@#.ad  /  ~google.com##.ad（除 google.com 外全部应用）
   function pickUserSelectors(userRules) {
-    if (!Array.isArray(userRules)) return [];
-    const result = [];
+    const hide = [];
+    const except = new Set();
+    if (!Array.isArray(userRules)) return { hide, except };
     for (const raw of userRules) {
       if (typeof raw !== "string") continue;
+
+      // 例外规则：#@#（对应选择器从隐藏列表剔除）
+      const exIdx = raw.indexOf("#@#");
+      if (exIdx >= 0) {
+        const domainsPart = raw.slice(0, exIdx).trim();
+        const selector = raw.slice(exIdx + 3).trim();
+        if (!selector) continue;
+        if (!domainsPart) { except.add(selector); continue; }
+        if (domainsMatch(domainsPart, host)) except.add(selector);
+        continue;
+      }
+
+      // 隐藏规则：##
       const idx = raw.indexOf("##");
       if (idx < 0) continue;
       const domainsPart = raw.slice(0, idx).trim();
       const selector = raw.slice(idx + 2).trim();
       if (!selector) continue;
-
-      // 全局规则（##selector）
-      if (!domainsPart) { result.push(selector); continue; }
-
-      // 域名列表规则（domain1,domain2##selector）
-      const domains = domainsPart.split(",").map(d => d.trim().toLowerCase()).filter(Boolean);
-      for (const d of domains) {
-        const pure = d.replace(/^~/, "").replace(/^\*\./, "");
-        // ~domain 表示"除了该域名"
-        if (d.startsWith("~")) continue;
-        if (host === pure || host.endsWith("." + pure)) { result.push(selector); break; }
-      }
+      if (!domainsPart) { hide.push(selector); continue; }
+      if (domainsMatch(domainsPart, host)) hide.push(selector);
     }
-    return result;
+    return { hide, except };
   }
 
-  let __userSelectors = [];
+  // 域名列表匹配：支持 ~排除 与 *. 通配。
+  // 纯 ~ 列表（如 ~google.com##.ad）语义为"除这些域名外全局应用"。
+  function domainsMatch(domainsPart, host) {
+    const parts = domainsPart.split(",").map(d => d.trim().toLowerCase()).filter(Boolean);
+    const excludes = parts.filter(d => d.startsWith("~")).map(d => d.replace(/^~/, "").replace(/^\*\./, ""));
+    const includes = parts.filter(d => !d.startsWith("~")).map(d => d.replace(/^\*\./, ""));
+    const hit = (d) => host === d || host.endsWith("." + d);
+    if (excludes.some(hit)) return false;
+    if (includes.length === 0) return true;   // 纯 ~ 列表：除排除项外全局
+    return includes.some(hit);
+  }
+
+  let __userSelectors = { hide: [], except: new Set() };
 
   function injectStyle() {
     const existing = document.getElementById(STYLE_ID);
@@ -188,7 +209,7 @@
 
   function reloadUserRules(settings) {
     chrome.storage.local.get(["adshield_user_rules", "adshield_user_cosmetic"], (store) => {
-      const lines = (store.adshield_user_rules || []).filter(l => typeof l === "string" && l.includes("##"));
+      const lines = (store.adshield_user_rules || []).filter(l => typeof l === "string" && (l.includes("##") || l.includes("#@#")));
       const cosmetic = store.adshield_user_cosmetic || [];
       const all = Array.from(new Set([...lines, ...cosmetic]));
       __userSelectors = pickUserSelectors(all);
@@ -243,27 +264,18 @@
       } catch (e) {}
     }
 
-    // ---- 1) window 全局变量检测（最准确）----
-    // 大部分检测脚本会在 window 上暴露状态
-    const DETECT_GLOBALS_TRUE = [
-      "adblockDetected", "adBlockDetected", "adblockerDetected",
-      "isAdBlockEnabled", "adBlockEnabled"
-    ];
-    const DETECT_GLOBALS_FALSE = [
-      "canRunAds", "canShowAds", "adsEnabled", "adsVisible"
-    ];
-    function checkGlobals() {
-      for (const key of DETECT_GLOBALS_TRUE) {
-        try {
-          if (window[key] === true) { trigger("global:" + key); return; }
-        } catch (e) {}
-      }
-      for (const key of DETECT_GLOBALS_FALSE) {
-        try {
-          if (window[key] === false) { trigger("global:" + key + "=false"); return; }
-        } catch (e) {}
-      }
-    }
+    // ---- 1) window 全局变量检测 ----
+    // 隔离世界读不到页面 window，真实检测由 MAIN world（anti-detect-main.js）完成，
+    // 这里只接收它回报的 __adshieldDetected 消息，并用一次性 nonce 校验来源。
+    const __nonce = window.__adshield_nonce__ ||
+      (document.documentElement.getAttribute("data-adshield-nonce") || "");
+    window.addEventListener("message", (event) => {
+      if (event.source !== window) return;
+      const d = event.data;
+      if (!d || d.__adshieldDetected !== 1) return;
+      if (!__nonce || d.nonce !== __nonce) return;
+      trigger("global:" + d.key);
+    }, true);
 
     // ---- 2) 脚本源码检测（中准确度）----
     // 检查 script 标签里的函数名/特征串
@@ -324,7 +336,6 @@
         if (timer) return;
         timer = setTimeout(() => {
           timer = 0;
-          checkGlobals();
           checkScripts();
         }, 300);
       });
@@ -361,13 +372,11 @@
     }
 
     // ---- 执行检测 ----
-    checkGlobals();
+    // 全局变量检测由 MAIN world 消息回报（上方 message 监听器），此处只做 DOM 三路扫描
     checkScripts();
     checkText();
-    setTimeout(checkGlobals, 1000);
     setTimeout(checkScripts, 1500);
     setTimeout(checkText, 2000);
-    setTimeout(checkGlobals, 4000);
     setTimeout(checkScripts, 4500);
     setTimeout(checkText, 5000);
     watchDOM();

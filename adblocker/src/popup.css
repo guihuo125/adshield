@@ -605,3 +605,14 @@ html[data-theme="dark"] .stat-icon-total { background: rgba(25,179,22,.18); }
   transform: translateX(4px);
   color: var(--color-brand-500);
 }
+
+.stats-note {
+  margin: 8px 14px 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: var(--note-bg, rgba(120, 120, 130, 0.12));
+  color: var(--text-secondary, #636568);
+  font-size: 11.5px;
+  line-height: 1.45;
+  text-align: center;
+}

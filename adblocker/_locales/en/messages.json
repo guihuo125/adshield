@@ -3,6 +3,6 @@
     "message": "AdShield Ad Blocker"
   },
   "extensionDescription": {
-    "message": "Lightweight ad & tracker blocker: network-level blocking, element hiding, URL cleaning, and anti-adblock bypass. All data stored locally, no uploads."
+    "message": "Lightweight ad & tracker blocker: network-level blocking, element hiding, URL cleaning, and anti-adblock bypass. Data is stored locally by default and only synced to the cloud after you sign up and log in."
   }
 }

@@ -78,3 +78,13 @@ html[data-theme="dark"] .cat-url_clean { background: rgba(0,174,240,.2); color: 
 html[data-theme="dark"] .cat-malware { background: rgba(153,27,27,.3); color: #fecaca; }
 
 .empty-tip { padding: 40px; text-align: center; color: var(--text-tertiary); font-size: 13px; }
+
+.logger-note {
+  margin: 0 16px 10px;
+  padding: 9px 12px;
+  border-radius: 8px;
+  background: rgba(120, 120, 130, 0.12);
+  color: #636568;
+  font-size: 12.5px;
+  line-height: 1.5;
+}

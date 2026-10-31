@@ -1,6 +1,6 @@
-// AdShield 反拦截检测规避 v4
+// AdShield 反拦截检测规避 v4（隔离世界部分）
 // 关键：不覆盖 Element/HTMLElement.prototype 的原生方法
-// 优化：属性枚举隐藏、setter 同步、失败回退
+// 全局变量伪装已移到 MAIN world（anti-detect-main.js），本文件只负责 DOM 诱饵与握手
 (function () {
   if (window.__adshield_anti_detect_installed__) return;
   window.__adshield_anti_detect_installed__ = true;
@@ -17,58 +17,27 @@
     return true;
   }
 
+  // 一次性 nonce：data 属性传给 MAIN world，隔离世界内共享（cosmetic.js 校验消息来源）
+  const nonce = Array.from(crypto.getRandomValues(new Uint8Array(16)),
+    (b) => b.toString(16).padStart(2, "0")).join("");
+  try {
+    document.documentElement.setAttribute("data-adshield-nonce", nonce);
+    window.__adshield_nonce__ = nonce;
+  } catch (e) {}
+
   chrome.storage.local.get("adshield_settings", (store) => {
-    if (shouldApply(store.adshield_settings)) apply();
+    const s = store.adshield_settings;
+    // 开关状态传给 MAIN world：仅当 antiDetect 生效时才应用全局伪装
+    try { window.postMessage({ __adshieldInit: 1, nonce, antiDetect: shouldApply(s) }, "*"); } catch (e) {}
+    if (shouldApply(s)) apply();
   });
 
   function apply() {
-    try { fakeGlobals(); } catch (e) { console.warn("[AdShield] fakeGlobals 失败", e); }
     try { injectBaitCSS(); } catch (e) { console.warn("[AdShield] injectBaitCSS 失败", e); }
     try { watchBaitElements(); } catch (e) { console.warn("[AdShield] watchBaitElements 失败", e); }
   }
 
-  // === 1) 全局变量伪装：枚举隐藏 + setter 同步 ===
-  function fakeGlobals() {
-    const values = {
-      canRunAds: true,
-      canShowAds: true,
-      adBlockDetected: false,
-      adblock: false,
-      Adblock: false,
-      blockAdBlock: undefined,
-      fuckAdBlock: undefined
-    };
-    for (const key of Object.keys(values)) {
-      try {
-        // 如果页面已有该属性（非 configurable），跳过
-        const existing = Object.getOwnPropertyDescriptor(window, key);
-        if (existing && existing.configurable === false) continue;
-
-        const fakeGetter = function () {
-          // 返回函数形式的探测值（部分脚本会调用 adBlockDetected()）
-          const v = values[key];
-          return typeof v === "function" ? v : v;
-        };
-        // 让 getter/setter/toString 看起来像原生
-        const nativeToString = Function.prototype.toString.call(function () {});
-
-        Object.defineProperty(window, key, {
-          get: fakeGetter,
-          set: function (v) {
-            // 页面尝试写该变量时：同步内部值（防止检测脚本发现"只读被绕过"）
-            values[key] = v;
-          },
-          enumerable: false,        // 隐藏枚举
-          configurable: true
-        });
-      } catch (e) {
-        // 失败回退：用赋值方式（弱化，但不报错）
-        try { window[key] = values[key]; } catch (_) {}
-      }
-    }
-  }
-
-  // === 2) CSS 诱饵伪装：不动原型，纯样式 ===
+  // === 1) CSS 诱饵伪装：不动原型，纯样式 ===
   function injectBaitCSS() {
     const css = `
       [class^="ad-"][class*="banner"],
@@ -96,7 +65,7 @@
     (document.head || document.documentElement).appendChild(style);
   }
 
-  // === 3) MutationObserver：加防抖，减少回调频率 ===
+  // === 2) MutationObserver：加防抖，减少回调频率 ===
   function watchBaitElements() {
     const BAIT_RE = /(^|\s)(ad|ads|adsbox|ad-banner|advertisement|ad-placeholder)(\s|$)/i;
     let timer = 0;

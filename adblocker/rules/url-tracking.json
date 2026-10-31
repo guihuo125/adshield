@@ -16,9 +16,10 @@
     },
     "condition": {
       "resourceTypes": [
-        "main_frame"
+        "main_frame",
+        "sub_frame"
       ],
-      "regexFilter": "[?&]utm_source="
+      "regexFilter": "^.*[?&]utm_source=.*$"
     }
   },
   {
@@ -38,9 +39,10 @@
     },
     "condition": {
       "resourceTypes": [
-        "main_frame"
+        "main_frame",
+        "sub_frame"
       ],
-      "regexFilter": "[?&]utm_medium="
+      "regexFilter": "^.*[?&]utm_medium=.*$"
     }
   },
   {
@@ -60,9 +62,10 @@
     },
     "condition": {
       "resourceTypes": [
-        "main_frame"
+        "main_frame",
+        "sub_frame"
       ],
-      "regexFilter": "[?&]utm_campaign="
+      "regexFilter": "^.*[?&]utm_campaign=.*$"
     }
   },
   {
@@ -82,9 +85,10 @@
     },
     "condition": {
       "resourceTypes": [
-        "main_frame"
+        "main_frame",
+        "sub_frame"
       ],
-      "regexFilter": "[?&]utm_term="
+      "regexFilter": "^.*[?&]utm_term=.*$"
     }
   },
   {
@@ -104,9 +108,10 @@
     },
     "condition": {
       "resourceTypes": [
-        "main_frame"
+        "main_frame",
+        "sub_frame"
       ],
-      "regexFilter": "[?&]utm_content="
+      "regexFilter": "^.*[?&]utm_content=.*$"
     }
   },
   {
@@ -126,9 +131,10 @@
     },
     "condition": {
       "resourceTypes": [
-        "main_frame"
+        "main_frame",
+        "sub_frame"
       ],
-      "regexFilter": "[?&]utm_id="
+      "regexFilter": "^.*[?&]utm_id=.*$"
     }
   },
   {
@@ -148,9 +154,10 @@
     },
     "condition": {
       "resourceTypes": [
-        "main_frame"
+        "main_frame",
+        "sub_frame"
       ],
-      "regexFilter": "[?&]utm_name="
+      "regexFilter": "^.*[?&]utm_name=.*$"
     }
   },
   {
@@ -170,9 +177,10 @@
     },
     "condition": {
       "resourceTypes": [
-        "main_frame"
+        "main_frame",
+        "sub_frame"
       ],
-      "regexFilter": "[?&]utm_reader="
+      "regexFilter": "^.*[?&]utm_reader=.*$"
     }
   },
   {
@@ -192,9 +200,10 @@
     },
     "condition": {
       "resourceTypes": [
-        "main_frame"
+        "main_frame",
+        "sub_frame"
       ],
-      "regexFilter": "[?&]utm_referrer="
+      "regexFilter": "^.*[?&]utm_referrer=.*$"
     }
   },
   {
@@ -214,9 +223,10 @@
     },
     "condition": {
       "resourceTypes": [
-        "main_frame"
+        "main_frame",
+        "sub_frame"
       ],
-      "regexFilter": "[?&]utm_social="
+      "regexFilter": "^.*[?&]utm_social=.*$"
     }
   },
   {
@@ -236,9 +246,10 @@
     },
     "condition": {
       "resourceTypes": [
-        "main_frame"
+        "main_frame",
+        "sub_frame"
       ],
-      "regexFilter": "[?&]gclid="
+      "regexFilter": "^.*[?&]gclid=.*$"
     }
   },
   {
@@ -258,9 +269,10 @@
     },
     "condition": {
       "resourceTypes": [
-        "main_frame"
+        "main_frame",
+        "sub_frame"
       ],
-      "regexFilter": "[?&]fbclid="
+      "regexFilter": "^.*[?&]fbclid=.*$"
     }
   },
   {
@@ -280,9 +292,10 @@
     },
     "condition": {
       "resourceTypes": [
-        "main_frame"
+        "main_frame",
+        "sub_frame"
       ],
-      "regexFilter": "[?&]dclid="
+      "regexFilter": "^.*[?&]dclid=.*$"
     }
   },
   {
@@ -302,9 +315,10 @@
     },
     "condition": {
       "resourceTypes": [
-        "main_frame"
+        "main_frame",
+        "sub_frame"
       ],
-      "regexFilter": "[?&]msclkid="
+      "regexFilter": "^.*[?&]msclkid=.*$"
     }
   },
   {
@@ -324,9 +338,10 @@
     },
     "condition": {
       "resourceTypes": [
-        "main_frame"
+        "main_frame",
+        "sub_frame"
       ],
-      "regexFilter": "[?&]yclid="
+      "regexFilter": "^.*[?&]yclid=.*$"
     }
   },
   {
@@ -346,9 +361,10 @@
     },
     "condition": {
       "resourceTypes": [
-        "main_frame"
+        "main_frame",
+        "sub_frame"
       ],
-      "regexFilter": "[?&]twclid="
+      "regexFilter": "^.*[?&]twclid=.*$"
     }
   },
   {
@@ -368,9 +384,10 @@
     },
     "condition": {
       "resourceTypes": [
-        "main_frame"
+        "main_frame",
+        "sub_frame"
       ],
-      "regexFilter": "[?&]igshid="
+      "regexFilter": "^.*[?&]igshid=.*$"
     }
   },
   {
@@ -390,9 +407,10 @@
     },
     "condition": {
       "resourceTypes": [
-        "main_frame"
+        "main_frame",
+        "sub_frame"
       ],
-      "regexFilter": "[?&]mc_eid="
+      "regexFilter": "^.*[?&]mc_eid=.*$"
     }
   },
   {
@@ -412,9 +430,10 @@
     },
     "condition": {
       "resourceTypes": [
-        "main_frame"
+        "main_frame",
+        "sub_frame"
       ],
-      "regexFilter": "[?&]mc_cid="
+      "regexFilter": "^.*[?&]mc_cid=.*$"
     }
   },
   {
@@ -434,9 +453,10 @@
     },
     "condition": {
       "resourceTypes": [
-        "main_frame"
+        "main_frame",
+        "sub_frame"
       ],
-      "regexFilter": "[?&]ref_src="
+      "regexFilter": "^.*[?&]ref_src=.*$"
     }
   },
   {
@@ -456,9 +476,10 @@
     },
     "condition": {
       "resourceTypes": [
-        "main_frame"
+        "main_frame",
+        "sub_frame"
       ],
-      "regexFilter": "[?&]ref_url="
+      "regexFilter": "^.*[?&]ref_url=.*$"
     }
   },
   {
@@ -478,9 +499,10 @@
     },
     "condition": {
       "resourceTypes": [
-        "main_frame"
+        "main_frame",
+        "sub_frame"
       ],
-      "regexFilter": "[?&]spm="
+      "regexFilter": "^.*[?&]spm=.*$"
     }
   },
   {
@@ -500,9 +522,10 @@
     },
     "condition": {
       "resourceTypes": [
-        "main_frame"
+        "main_frame",
+        "sub_frame"
       ],
-      "regexFilter": "[?&]scm="
+      "regexFilter": "^.*[?&]scm=.*$"
     }
   },
   {
@@ -522,9 +545,10 @@
     },
     "condition": {
       "resourceTypes": [
-        "main_frame"
+        "main_frame",
+        "sub_frame"
       ],
-      "regexFilter": "[?&]_ga="
+      "regexFilter": "^.*[?&]_ga=.*$"
     }
   },
   {
@@ -544,9 +568,10 @@
     },
     "condition": {
       "resourceTypes": [
-        "main_frame"
+        "main_frame",
+        "sub_frame"
       ],
-      "regexFilter": "[?&]_gl="
+      "regexFilter": "^.*[?&]_gl=.*$"
     }
   },
   {
@@ -566,9 +591,10 @@
     },
     "condition": {
       "resourceTypes": [
-        "main_frame"
+        "main_frame",
+        "sub_frame"
       ],
-      "regexFilter": "[?&]_hsenc="
+      "regexFilter": "^.*[?&]_hsenc=.*$"
     }
   },
   {
@@ -588,9 +614,10 @@
     },
     "condition": {
       "resourceTypes": [
-        "main_frame"
+        "main_frame",
+        "sub_frame"
       ],
-      "regexFilter": "[?&]_hsmi="
+      "regexFilter": "^.*[?&]_hsmi=.*$"
     }
   },
   {
@@ -610,9 +637,10 @@
     },
     "condition": {
       "resourceTypes": [
-        "main_frame"
+        "main_frame",
+        "sub_frame"
       ],
-      "regexFilter": "[?&]vero_id="
+      "regexFilter": "^.*[?&]vero_id=.*$"
     }
   },
   {
@@ -632,9 +660,10 @@
     },
     "condition": {
       "resourceTypes": [
-        "main_frame"
+        "main_frame",
+        "sub_frame"
       ],
-      "regexFilter": "[?&]wickedid="
+      "regexFilter": "^.*[?&]wickedid=.*$"
     }
   }
 ]

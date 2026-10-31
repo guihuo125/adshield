@@ -341,6 +341,10 @@ async function render() {
   // 无论是否有变化，都强制刷新圆环（避免残留）
   renderWheel(byCategory, false);
 
+  // 统计可用性提示：onRuleMatchedDebug 仅开发者模式触发；正式安装版显示说明
+  const note = $("#statsNote");
+  if (note) note.hidden = stats.live !== false;
+
   // Stats（注意：本站数用 statSite，累计数用 statTotal）
   const elSite = $("#statSite");
   const elTotal = $("#statTotal");
