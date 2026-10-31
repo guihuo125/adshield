@@ -3,13 +3,15 @@
   if (window.__adshield_modal__) return;
   window.__adshield_modal__ = true;
 
-  let overlay = null;
+  // 每个弹窗各占一层，后开的压在上面。
+  // 原先全场共用一个 overlay：第二个弹窗会直接改写第一个的文案和按钮，
+  // 第一个 Promise 永远等不到 resolve（调用方就此挂住），键盘还会同时触发两层。
+  const stack = [];
 
-  function ensureOverlay() {
-    if (overlay) return overlay;
-    overlay = document.createElement("div");
-    overlay.className = "adshield-modal-overlay";
-    overlay.innerHTML = `
+  function createOverlay() {
+    const el = document.createElement("div");
+    el.className = "adshield-modal-overlay";
+    el.innerHTML = `
       <div class="adshield-modal" role="dialog" aria-modal="true">
         <div class="adshield-modal-icon" data-icon></div>
         <div class="adshield-modal-body">
@@ -22,8 +24,13 @@
         </div>
       </div>
     `;
-    document.body.appendChild(overlay);
-    return overlay;
+    document.body.appendChild(el);
+    stack.push(el);
+    return el;
+  }
+
+  function isTop(el) {
+    return stack.length > 0 && stack[stack.length - 1] === el;
   }
 
   /**
@@ -48,7 +55,7 @@
     const isHtml = !!options.html;            // 是否 HTML 渲染
 
     return new Promise((resolve) => {
-      const el = ensureOverlay();
+      const el = createOverlay();
       el.setAttribute("data-type", type);
       el.setAttribute("data-size", size);
       el.setAttribute("data-alert-only", alertOnly ? "true" : "false");
@@ -81,14 +88,14 @@
       requestAnimationFrame(() => el.classList.add("open"));
 
       function cleanup(result) {
-        const cur = el;   // 捕获当前 overlay 引用（避免被新的 showConfirm 覆盖）
+        const cur = el;
         cur.classList.remove("open");
         btnConfirm.removeEventListener("click", onConfirm);
         btnCancel.removeEventListener("click", onCancel);
         cur.removeEventListener("click", onOverlayClick);
         document.removeEventListener("keydown", onKey);
-        // 立即置 null → 让下一次 showConfirm 创建新 overlay
-        if (overlay === cur) overlay = null;
+        const at = stack.indexOf(cur);
+        if (at >= 0) stack.splice(at, 1);
         setTimeout(() => {
           if (cur && cur.parentNode) cur.parentNode.removeChild(cur);
         }, 180);
@@ -97,16 +104,18 @@
       function onConfirm() { cleanup(true); }
       function onCancel() { cleanup(false); }
       function onOverlayClick(e) {
-        if (e.target === overlay) cleanup(false);
+        // 只响应最上层那一个，否则点一下会把底下几层一起关掉
+        if (e.target === el && isTop(el)) cleanup(false);
       }
       function onKey(e) {
+        if (!isTop(el)) return;
         if (e.key === "Escape") cleanup(false);
         if (e.key === "Enter") cleanup(true);
       }
 
       btnConfirm.addEventListener("click", onConfirm);
       btnCancel.addEventListener("click", onCancel);
-      overlay.addEventListener("click", onOverlayClick);
+      el.addEventListener("click", onOverlayClick);
       document.addEventListener("keydown", onKey);
 
       // 自动聚焦"取消"（安全默认）；alertOnly 时聚焦确定

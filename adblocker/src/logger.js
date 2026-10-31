@@ -9,6 +9,8 @@ function fmtTime(ts) {
   return pad(d.getHours()) + ":" + pad(d.getMinutes()) + ":" + pad(d.getSeconds());
 }
 
+const SAFE_CATS = { ads: 1, tracking: 1, annoyances: 1, url_clean: 1, malware: 1 };
+
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 }
@@ -66,7 +68,7 @@ function render() {
   for (const l of filtered.slice(0, MAX_ROWS)) {
     const tr = document.createElement("tr");
     const catName = { ads: "广告", tracking: "追踪", annoyances: "干扰", url_clean: "URL", malware: "恶意" }[l.cat] || l.cat || "未知";
-    tr.innerHTML = `<td>${fmtTime(l.ts)}</td><td><span class="cat-tag cat-${l.cat || "ads"}">${catName}</span></td><td>${escapeHtml(l.url || "")}</td><td>${escapeHtml(l.pageHost || "")}</td>`;
+    tr.innerHTML = `<td>${fmtTime(l.ts)}</td><td><span class="cat-tag cat-${SAFE_CATS[l.cat] ? l.cat : "ads"}">${catName}</span></td><td>${escapeHtml(l.url || "")}</td><td>${escapeHtml(l.pageHost || "")}</td>`;
     tbody.appendChild(tr);
   }
 }

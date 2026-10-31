@@ -146,7 +146,7 @@ chrome.alarms.onAlarm.addListener((a) => {
 });
 
 /* ============ 命中规则分类 ============ */
-// 双维度判断：URL 特征 > rulesetId
+// 判断顺序：静态 ruleId 区间 > URL 特征
 // 原因：多个规则集优先级相同时，Chrome 可能先命中 ads，导致 tracking 永不被选中
 // 分类：
 //   ads      — 广告
@@ -185,7 +185,32 @@ function isThirdPartyTracker(host) {
   return false;
 }
 
-function classifyRule(rulesetId, url, pageHost) {
+/* ============ 静态规则集身份 ============
+   manifest 里的规则集 id 是字符串，但 onRuleMatchedDebug 给的 rulesetId 是 Chrome 分配的
+   数字，拿 "url_clean" 去比对永远不成立。静态规则的 ruleId 打包时就固定不变，用它认门最可靠：
+   ads=100 / tracking=1000 / annoyances=2000 / url_clean=3000~3028 / malware=4000。 */
+const STATIC_RULE_SETS = [
+  { min: 100, max: 100, cat: "ads" },
+  { min: 1000, max: 1000, cat: "tracking" },
+  { min: 2000, max: 2000, cat: "annoyances" },
+  { min: 3000, max: 3028, cat: "url_clean" },
+  { min: 4000, max: 4000, cat: "malware" }
+];
+
+function staticRuleSetCat(ruleId) {
+  const rid = Number(ruleId);
+  if (!Number.isFinite(rid)) return "";
+  for (const s of STATIC_RULE_SETS) {
+    if (rid >= s.min && rid <= s.max) return s.cat;
+  }
+  return "";
+}
+
+function classifyRule(ruleId, url, pageHost) {
+  // 0) 静态规则集直接按 ruleId 归属，不再靠 URL 猜
+  const fixed = staticRuleSetCat(ruleId);
+  if (fixed) return fixed;
+
   const u = String(url || "").toLowerCase();
 
   // 1) URL 参数特征：追踪参数 -> url_clean
@@ -209,13 +234,7 @@ function classifyRule(rulesetId, url, pageHost) {
     return "tracking";
   }
 
-  // 5) 回退到 rulesetId
-  if (!rulesetId) return "ads";
-  const id = String(rulesetId).toLowerCase();
-  if (id.includes("track")) return "tracking";
-  if (id.includes("annoy")) return "annoyances";
-  if (id.includes("url")) return "url_clean";
-  if (id.includes("malware")) return "malware";
+  // 5) 走到这里只剩动态规则（订阅 / 用户自定义），它们没有规则集身份，按 URL 特征归到广告
   return "ads";
 }
 
@@ -410,7 +429,7 @@ async function applyUserRules(rules) {
     await chrome.storage.local.set({ "adshield_user_cosmetic": cosmetic });
     console.log("[AdShield] 已应用用户规则:", addRules.length, "条，元素隐藏:", cosmetic.length, "条，跳过:", skipped.length, "条");
   } catch (e) {
-    console.warn("[AdShield] 用户规则应用失败", e);
+    console.log("[AdShield] 用户规则应用失败（已写入结果供设置页显示）", e);
     return { applied: 0, skipped: [...skipped, { line: "(全体)", reason: e.message || String(e) }], cosmetic: 0 };
   }
 
@@ -635,6 +654,9 @@ async function applySubscriptionText(sub, text) {
     if (m) {
       const domain = m[1].replace(/^\*\./, "").replace(/\*$/, "");
       if (!domain || domain.includes("*")) {
+        // 带通配符的例外规则不能原样丢进 pathRules：
+        // 那里每一项都会被构建成「拦截」规则，@@ 放行会变成拉黑，语义完全反过来
+        if (isException) { skipped++; continue; }
         pathRules.push(t);
         continue;
       }
@@ -752,6 +774,11 @@ async function applySubscriptionText(sub, text) {
   console.log("[AdShield] 路径规则处理完成：原始", pathRules.length, "条 → 有效", validPathRules.length, "条 → 保留", pathAdded, "条");
 
   // ===== 应用 =====
+  // 一条都没解析出来时什么都不做。订阅源被 CDN/反爬挡回一个 HTML 错误页时，解析结果就是 0 条，
+  // 照常下发会把该订阅原有的规则整段删掉，还回一句「更新成功 0 条」，用户只看到广告回来了。
+  if (addRules.length === 0) {
+    return { ok: false, error: "未解析出任何可用规则（可能拿到的是错误页，或格式不受支持）", skipped };
+  }
   try {
     await chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds, addRules });
     return {
@@ -785,46 +812,73 @@ async function updateAllSubscriptions() {
     enabledSubs.map(sub => fetchSubscriptionText(sub.url).then(r => ({ sub, fetched: r })))
   );
 
-  // 阶段 2：串行提交（防 dynamicRules 冲突）
+  // 阶段 2：串行提交。整段放进订阅队列 —— 单条订阅的新增/更新/删除也走同一个队列，
+  // 两边并发时各自算出同一批规则 ID，Chrome 会整批拒绝写入，订阅就此停在旧版本。
   let totalOk = 0, totalFail = 0, totalRules = 0, totalChanged = 0;
-  for (const { sub, fetched } of fetchedList) {
-    let result;
-    let newHash = "";
-    if (fetched.ok) {
-      newHash = simpleHash(fetched.text);
-      result = await applySubscriptionText(sub, fetched.text);
-    } else {
-      result = { ok: false, error: fetched.error };
-    }
-    sub.lastUpdate = Date.now();
-    if (result.ok) {
-      // 检测内容是否变化（用于统计，不保留 hasUpdate）
-      const oldHash = sub.lastHash;
-      if (oldHash && oldHash !== newHash) {
-        totalChanged++;
+  await enqueueSubscription(async () => {
+    for (const { sub, fetched } of fetchedList) {
+      let result;
+      let newHash = "";
+      if (fetched.ok) {
+        newHash = simpleHash(fetched.text);
+        result = await applySubscriptionText(sub, fetched.text);
+      } else {
+        result = { ok: false, error: fetched.error };
       }
-      sub.lastHash = newHash;
-      sub.lastCount = result.count;
-      sub.lastDomains = result.domains || 0;
-      sub.lastExceptions = result.exceptions || 0;
-      sub.lastPaths = result.paths || 0;
-      // 更新完成 → 清除 hasUpdate 标记（关键修复）
-      sub.hasUpdate = false;
-      delete sub.lastError;
-      totalOk++;
-      totalRules += result.count;
-    } else {
-      sub.lastError = result.error;
-      totalFail++;
+      sub.lastUpdate = Date.now();
+      if (result.ok) {
+        // 检测内容是否变化（用于统计，不保留 hasUpdate）
+        const oldHash = sub.lastHash;
+        if (oldHash && oldHash !== newHash) {
+          totalChanged++;
+        }
+        sub.lastHash = newHash;
+        sub.lastCount = result.count;
+        sub.lastDomains = result.domains || 0;
+        sub.lastExceptions = result.exceptions || 0;
+        sub.lastPaths = result.paths || 0;
+        // 更新完成 → 清除 hasUpdate 标记（关键修复）
+        sub.hasUpdate = false;
+        delete sub.lastError;
+        totalOk++;
+        totalRules += result.count;
+      } else {
+        sub.lastError = result.error;
+        totalFail++;
+      }
     }
-  }
+  });
 
-  s.subscriptions = subs;
-  s.lastSubscriptionCheck = Date.now();
-  if (totalChanged > 0) {
-    s.lastSubscriptionChangeTs = Date.now();
+  // 这一轮拉取最长要 30 秒，期间用户可能在弹窗里改开关、暂停站点，甚至增删订阅。
+  // 直接把函数开头读到的那个对象整体写回，会把那些改动一起抹掉（表现为「我刚关掉的又自己开了」），
+  // 所以落盘前重读一次，只把本轮真正改过的字段合并进去。
+  const fresh = await getSettings();
+  const freshSubs = fresh.subscriptions || [];
+  const byId = new Map(subs.map(x => [x.id, x]));
+  for (const cur of freshSubs) {
+    const upd = byId.get(cur.id);
+    if (!upd) continue;                 // 本轮没碰过这条（新增/刚恢复），保持用户现在的状态
+    cur.lastUpdate = upd.lastUpdate;
+    if (upd.lastError) {
+      cur.lastError = upd.lastError;
+    } else {
+      delete cur.lastError;
+      cur.hasUpdate = false;
+      cur.lastHash = upd.lastHash;
+      cur.lastCount = upd.lastCount;
+      cur.lastDomains = upd.lastDomains;
+      cur.lastExceptions = upd.lastExceptions;
+      cur.lastPaths = upd.lastPaths;
+    }
+    byId.delete(cur.id);
   }
-  await chrome.storage.local.set({ [SETTINGS_KEY]: s });
+  // byId 里剩下的是拉取期间已被用户删掉的订阅，不写回
+  fresh.subscriptions = freshSubs;
+  fresh.lastSubscriptionCheck = Date.now();
+  if (totalChanged > 0) {
+    fresh.lastSubscriptionChangeTs = Date.now();
+  }
+  await chrome.storage.local.set({ [SETTINGS_KEY]: fresh });
   console.log("[AdShield] 订阅更新完成：成功", totalOk, "失败", totalFail, "共", totalRules, "条规则，", totalChanged, "个有变化");
   return { ok: totalOk, fail: totalFail, rules: totalRules, changed: totalChanged };
 }
@@ -910,13 +964,17 @@ function handleOtherMessage(msg, sender, sendResponse) {
         const changed = JSON.stringify(prev) !== JSON.stringify(next);
         await chrome.storage.local.set({ "adshield_user_rules": next });
         if (changed) {
-          sendResponse({ ok: true });
+          // 真正生效在 storage.onChanged 的防抖里，这里先立一个 pending 标记，
+          // 让设置页能区分「正在应用」和「上一次的结果」
+          await chrome.storage.local.set({ adshield_user_rules_result: { ts: Date.now(), pending: true } });
+          sendResponse({ ok: true, pending: true });
         } else {
           const result = await applyUserRules(next);
+          await chrome.storage.local.set({ adshield_user_rules_result: { ts: Date.now(), ok: true, result } });
           sendResponse({ ok: true, result });
         }
       } else if (msg && msg.type === "getSubscriptions") {
-        sendResponse({ ok: true, subscriptions: s.subscriptions || [], interval: s.subscriptionInterval || 24, lastCheck: s.lastSubscriptionCheck || 0 });
+        sendResponse({ ok: true, subscriptions: s.subscriptions || [], interval: typeof s.subscriptionInterval === "number" ? s.subscriptionInterval : 24, lastCheck: s.lastSubscriptionCheck || 0 });
       } else if (msg && msg.type === "saveSubscription") {
         const incoming = msg.subscription || {};
 
@@ -1189,15 +1247,18 @@ function handleOtherMessage(msg, sender, sendResponse) {
         const subs = (s.subscriptions || []).filter(x => x.id !== msg.id);
         s.subscriptions = subs;
         await chrome.storage.local.set({ [SETTINGS_KEY]: s });
-        // 清理该订阅的规则（ID 段算法与 applySubscription 一致）
-        const base = SUB_RULE_BASE + ((msg.id || 0) % 100) * 10000;
-        const existing = await chrome.declarativeNetRequest.getDynamicRules();
-        const removeRuleIds = existing
-          .filter(r => r.id >= base && r.id < base + 10000)
-          .map(r => r.id);
-        if (removeRuleIds.length) {
-          await chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds, addRules: [] });
-        }
+        // 清理该订阅的规则（ID 段算法与 applySubscription 一致）。
+        // 同样要排队：与订阅更新并发时，这里算出的 removeRuleIds 可能漏掉对方刚写入的 ID。
+        await enqueueSubscription(async () => {
+          const base = SUB_RULE_BASE + ((msg.id || 0) % 100) * 10000;
+          const existing = await chrome.declarativeNetRequest.getDynamicRules();
+          const removeRuleIds = existing
+            .filter(r => r.id >= base && r.id < base + 10000)
+            .map(r => r.id);
+          if (removeRuleIds.length) {
+            await chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds, addRules: [] });
+          }
+        });
         sendResponse({ ok: true, subscriptions: subs });
       } else if (msg && msg.type === "updateAllSubscriptions") {
         const result = await updateAllSubscriptions();
@@ -1226,7 +1287,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       try { return new URL(sender.tab.url).hostname; } catch (e) { return ""; }
     })();
     if (senderHost && senderHost !== msg.host) {
-      console.warn("[AdShield 浏览助手] 已拒绝：host 与来源标签页不符", msg.host, "≠", senderHost);
+      console.log("[AdShield 浏览助手] 已拒绝：host 与来源标签页不符", msg.host, "≠", senderHost);
       sendResponse({ ok: false, reason: "host-mismatch" });
       return true;
     }
@@ -1356,9 +1417,15 @@ async function scheduleSubscriptionCheck() {
     return;
   }
   // 使用 periodInMinutes（最小 30 分钟）
-  chrome.alarms.create("adshield-sub-update", {
-    periodInMinutes: Math.max(30, hours * 60)
-  });
+  const periodInMinutes = Math.max(30, hours * 60);
+  // 同名 alarm 再次 create 会被整个替换，首次触发时间也随之推后。
+  // 而 storage.onChanged 里每一次设置变动都会走到这里——照旧重建，
+  // 「每 24 小时自动更新」就会被用户的日常操作无限推迟，事实上永远不触发。
+  try {
+    const cur = await chrome.alarms.get("adshield-sub-update");
+    if (cur && cur.periodInMinutes === periodInMinutes) return;
+  } catch (e) {}
+  chrome.alarms.create("adshield-sub-update", { periodInMinutes });
   console.log("[AdShield] 订阅更新定时器已设置：每", hours, "小时");
 }
 
@@ -1366,7 +1433,7 @@ chrome.alarms.onAlarm.addListener(async (a) => {
   if (a.name === "adshield-first-sub-fetch") {
     await chrome.alarms.clear("adshield-first-sub-fetch");
     updateAllSubscriptions().catch((e) => {
-      console.warn("[AdShield] 首次订阅拉取失败：", e);
+      console.log("[AdShield] 首次订阅拉取失败：", e);
     });
     return;
   }
@@ -1437,7 +1504,18 @@ chrome.storage.onChanged.addListener((changes, area) => {
     // 防抖：合并短时间内的多次变更，避免 updateDynamicRules 并发竞态
     clearTimeout(__userRulesApplyTimer);
     __userRulesApplyTimer = setTimeout(() => {
-      applyUserRules(changes.adshield_user_rules.newValue || []).catch(() => {});
+      applyUserRules(changes.adshield_user_rules.newValue || [])
+        .then((result) => {
+          // 结果必须落盘：saveUserRules 早就回了 ok:true，若这里失败只有 console 里一行，
+          // 用户在设置页看到的是「保存成功」，实际一条都没生效。
+          return chrome.storage.local.set({ adshield_user_rules_result: { ts: Date.now(), ok: true, result } });
+        })
+        .catch((e) => {
+          console.error("[AdShield] 自定义规则应用异常:", e);
+          return chrome.storage.local.set({
+            adshield_user_rules_result: { ts: Date.now(), ok: false, error: String((e && e.message) || e) }
+          });
+        });
     }, 300);
   }
 });
@@ -1549,7 +1627,7 @@ async function maybeNotifyBlocked(tabId, pageHost, count) {
       silent: true
     });
   } catch (e) {
-    console.warn("[AdShield] 通知失败：", e);
+    console.log("[AdShield] 通知失败：", e);
   }
 }
 
@@ -1573,11 +1651,11 @@ if (chrome.declarativeNetRequest.onRuleMatchedDebug) {
     }
 
     const stats = await loadStatsBuffer();
-    const rulesetId = info.rule && info.rule.rulesetId;
-    const cat = classifyRule(rulesetId, info.request.url, pageHost);
+    const ruleId = info.rule && info.rule.ruleId;
+    const cat = classifyRule(ruleId, info.request.url, pageHost);
     // url_clean 规则集是参数清理（重定向），不计入"拦截总数"
-    // 注意：必须用 rulesetId 判断，不能用 cat（cat 基于 URL 特征可能误判）
-    const isUrlClean = String(rulesetId || "").toLowerCase() === "url_clean";
+    // 注意：按静态 ruleId 区间判定，不能用 cat（cat 基于 URL 特征可能误判）
+    const isUrlClean = staticRuleSetCat(ruleId) === "url_clean";
     if (!isUrlClean) {
       stats.total = (stats.total || 0) + 1;
       if (pageHost) stats.byPage[pageHost] = (stats.byPage[pageHost] || 0) + 1;
@@ -1633,7 +1711,7 @@ if (chrome.declarativeNetRequest.onRuleMatchedDebug) {
     }
   });
 } else {
-  console.warn("[AdShield] onRuleMatchedDebug 不可用（需开发者模式加载）");
+  console.log("[AdShield] onRuleMatchedDebug 不可用（需开发者模式加载）");
 }
 
 // 标签关闭时清理通知状态
@@ -1647,7 +1725,7 @@ chrome.tabs.onRemoved.addListener((tabId) => {
     const store = await chrome.storage.local.get("adshield_user_rules");
     await applyUserRules(store.adshield_user_rules || []);
   } catch (e) {
-    console.warn("[AdShield] 启动应用用户规则失败:", e);
+    console.log("[AdShield] 启动应用用户规则失败:", e);
   }
 })();
 
@@ -1671,16 +1749,17 @@ async function cleanupOrphanSubscriptions() {
       console.log("[AdShield] 已清理孤儿订阅规则:", orphan.length, "条");
     }
   } catch (e) {
-    console.warn("[AdShield] 清理孤儿订阅规则失败:", e);
+    console.log("[AdShield] 清理孤儿订阅规则失败:", e);
   }
 }
 
 // 不在启动时主动调用（由 onInstalled/onStartup 触发）
 
-// SW 挂起前刷盘：MV3 SW 没有 beforeunload，改用 chrome.runtime.onSuspend
-// 注意：Chrome MV3 中 onSuspend 事件在 SW 被终止前触发，但只有很短的时间窗口
+// 浏览器退出时把统计缓冲落盘。
+// 注意：MV3 只在「永久挂起」（退出浏览器）时触发本事件，空闲终止不会走到这里，
+// 所以它只是兜底，防丢数据主要靠命中时的排队写盘。
 if (chrome.runtime.onSuspend) {
   chrome.runtime.onSuspend.addListener(() => {
-    try { flushStats(); } catch (e) {}
+    flushStats().catch((e) => { console.log("[AdShield] 挂起前刷盘未完成:", (e && e.message) || e); });
   });
 }

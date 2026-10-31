@@ -257,10 +257,16 @@
     function trigger(reason) {
       if (triggered) return;
       triggered = true;
+      console.log("[AdShield 浏览助手] 检测到反拦截脚本:", host, "原因:", reason);
+      // 后台未必会真的暂停：host 与来源标签不符、浏览助手已关、本站已在暂停中，都会拒绝。
+      // 不等回包就弹「已为本站暂时暂停」，等于在最该说真话的地方骗用户。
       try {
-        chrome.runtime.sendMessage({ type: "assistDetected", host, reason });
-        console.log("[AdShield 浏览助手] 检测到反拦截脚本:", host, "原因:", reason);
-        showAssistNotice();
+        chrome.runtime.sendMessage({ type: "assistDetected", host, reason })
+          .then((res) => {
+            if (res && res.ok) showAssistNotice();
+            else console.log("[AdShield 浏览助手] 后台未暂停本站:", (res && res.reason) || "no-response");
+          })
+          .catch((e) => { console.log("[AdShield 浏览助手] 上报失败:", (e && e.message) || e); });
       } catch (e) {}
     }
 
@@ -408,7 +414,10 @@
       }
     }, 150);
   });
-  obs.observe(document.documentElement, { childList: true, subtree: false });
+  // 注入的 <style> 挂在 <head> 里，页面脚本把它删掉属于 head 的子节点变化；
+  // 原先只观察 documentElement 且 subtree:false，这类删除根本触发不了补扫，一次删掉就永久放行。
+  // 回调首行是「已排过队就直接返回」，整页高频变动时开销也只有这一次判断。
+  obs.observe(document.documentElement, { childList: true, subtree: true });
   window.addEventListener("pagehide", () => {
     obs.disconnect();
     if (__cosmeticTimer) clearTimeout(__cosmeticTimer);

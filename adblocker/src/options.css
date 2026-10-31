@@ -710,6 +710,22 @@ textarea:focus {
   font-size: 12.5px; font-weight: 500;
   color: var(--color-success-600);
 }
+/* .status 默认是绿色，失败/进行中的提示必须能换成别的颜色，
+   否则「导出失败」也会显示成一片绿 */
+.status.err { color: var(--color-danger-500); }
+.status.busy { color: var(--text-3, #636568); }
+
+/* 卡片内的行内提示：#subHint / #deviceHint / #syncHint 都挂 .hint，
+   此前 CSS 里没有对应规则，导致「设置失败」和「设置成功」看起来一模一样 */
+.hint {
+  font-size: 12px; line-height: 1.5;
+  color: var(--text-tertiary);
+  margin-top: 6px;
+  min-height: 16px;
+  word-break: break-all;
+}
+.hint.err { color: var(--color-danger-500); }
+.hint.ok { color: var(--color-success-600); }
 
 /* ============ Stats ============ */
 .stats-grid-2 {

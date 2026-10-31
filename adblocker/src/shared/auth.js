@@ -676,6 +676,17 @@
     return !!(SUPABASE_URL && SUPABASE_ANON_KEY);
   }
 
+  // 网络层失败（连不上/超时）与凭据被服务端拒绝是两回事：
+  // 把断网也报成「登录已过期」会把好好的会话踢掉，用户既看不懂也自救不了。
+  const NET_TIMEOUT_MS = 15000;
+  function isOfflineError(e) {
+    if (!e) return false;
+    const n = String(e.name || "");
+    const m = String(e.message || e);
+    return n === "TimeoutError" || n === "AbortError" ||
+      /Failed to fetch|NetworkError|ERR_[A-Z_]+|timed out|超时|网络/i.test(m);
+  }
+
   async function sbRequest(path, options) {
     const url = SUPABASE_URL + path;
     const headers = Object.assign({
@@ -686,7 +697,19 @@
       headers["Authorization"] = "Bearer " + options.token;
     }
     console.log("[AdShield Auth] →", (options && options.method) || "GET", url);
-    const resp = await fetch(url, Object.assign({}, options, { headers }));
+    let resp;
+    try {
+      // 没有超时就没有「按钮永久停在登录中…」：连不上的时候必须自己断开并恢复界面
+      resp = await fetch(url, Object.assign({}, options, {
+        headers,
+        signal: AbortSignal.timeout(NET_TIMEOUT_MS)
+      }));
+    } catch (e) {
+      if (e && (e.name === "TimeoutError" || e.name === "AbortError")) {
+        throw new Error("连接账号服务超时（15 秒），请检查网络后重试");
+      }
+      throw e;
+    }
     const data = await resp.json().catch(() => ({}));
     console.log("[AdShield Auth] ←", resp.status, data);
     if (!resp.ok) {
@@ -728,6 +751,8 @@
         lastSyncAt: Date.now(),
         mode: "supabase"
       });
+      // 重新登录成功：复位「过期已提示」标记，否则下次静默过期就再也不出声了
+      try { await chrome.storage.local.remove("adshield_session_expired_notified"); } catch (e) {}
       // 立即渲染 UI（不等待后台操作）
       renderAccount();
       // 后台操作：并发执行，不阻塞登录返回
@@ -884,7 +909,8 @@
         const r = await fetch(SUPABASE_URL + "/auth/v1/token?grant_type=refresh_token", {
           method: "POST",
           headers: { "apikey": SUPABASE_ANON_KEY, "Content-Type": "application/json" },
-          body: JSON.stringify({ refresh_token: state.refreshToken })
+          body: JSON.stringify({ refresh_token: state.refreshToken }),
+          signal: AbortSignal.timeout(NET_TIMEOUT_MS)
         });
         if (r.ok) {
           const d = await r.json();
@@ -900,7 +926,8 @@
         headers: {
           "apikey": SUPABASE_ANON_KEY,
           "Authorization": "Bearer " + token
-        }
+        },
+        signal: AbortSignal.timeout(NET_TIMEOUT_MS)
       });
       if (resp.ok || resp.status === 204) {
         result.configDeleted = true;
@@ -921,7 +948,8 @@
           "Authorization": "Bearer " + token,
           "Content-Type": "application/json"
         },
-        body: JSON.stringify({})
+        body: JSON.stringify({}),
+        signal: AbortSignal.timeout(NET_TIMEOUT_MS)
       });
       if (resp.ok) {
         const d = await resp.json().catch(() => ({}));
@@ -1146,7 +1174,8 @@
               "Authorization": "Bearer " + accessToken,
               "Content-Type": "application/json"
             },
-            body: JSON.stringify({ password: p1 })
+            body: JSON.stringify({ password: p1 }),
+            signal: AbortSignal.timeout(NET_TIMEOUT_MS)
           });
           const data = await resp.json().catch(() => ({}));
           if (!resp.ok) throw new Error(data.msg || data.message || ("HTTP " + resp.status));
@@ -1265,7 +1294,8 @@
       headers: {
         "apikey": SUPABASE_ANON_KEY,
         "Authorization": "Bearer " + tk
-      }
+      },
+      signal: AbortSignal.timeout(NET_TIMEOUT_MS)
     }), token);
     if (!resp.ok) throw new Error("获取设备列表失败：" + resp.status);
     return resp.json();
@@ -1279,7 +1309,8 @@
       headers: {
         "apikey": SUPABASE_ANON_KEY,
         "Authorization": "Bearer " + tk
-      }
+      },
+      signal: AbortSignal.timeout(NET_TIMEOUT_MS)
     }), token);
     if (!resp.ok) throw new Error("移除失败：" + resp.status);
     return true;
@@ -1297,11 +1328,19 @@
     const listEl = document.getElementById("deviceList");
     if (!listEl) return;
     const state = await getAuthState();
+    const hintEl = document.getElementById("deviceHint");
+    const setHint = (text, kind) => {
+      if (!hintEl) return;
+      hintEl.textContent = text || "";
+      hintEl.className = "hint" + (kind ? " " + kind : "");
+    };
     if (!state || !state.token || !state.userId || state.mode === "local") {
       listEl.innerHTML = "";
+      setHint("");
       return;
     }
     listEl.innerHTML = '<li class="device-item"><span class="device-loading">加载中...</span></li>';
+    setHint("正在读取登录设备…", "busy");
     try {
       const devices = await fetchDevices(state.token, state.userId);
       const currentId = await getDeviceId();
@@ -1350,7 +1389,9 @@
         }
         listEl.appendChild(li);
       }
+      setHint(devices.length + " 台设备登录过此账号", devices.length > 1 ? "ok" : undefined);
     } catch (e) {
+      setHint("设备列表没读到：" + (e.message || e) + "（其余同步功能不受影响）", "err");
       listEl.innerHTML = '<li class="device-item"><span class="device-empty">加载失败：' + escapeHtmlSimple(e.message || e) + "</span></li>";
     }
   }
@@ -1385,7 +1426,7 @@
     a.download = "adshield-backup-" + ts + ".json";
     a.click();
     setTimeout(() => URL.revokeObjectURL(url), 1000);
-    return { size: json.length };
+    return { size: json.length, count: Object.keys(payload.data).length };
   }
 
   async function importAllData(file) {
@@ -1621,9 +1662,9 @@
     preset = preset || {};
     const isLogin = mode === "login";
     const noticeHtml = preset.notice
-      ? '<div class="auth-notice auth-notice-ok">' + preset.notice + '</div>'
+      ? '<div class="auth-notice auth-notice-ok">' + escapeHtmlSimple(preset.notice) + '</div>'
       : '';
-    const emailValue = preset.email ? 'value="' + preset.email.replace(/"/g, "&quot;") + '"' : '';
+    const emailValue = preset.email ? 'value="' + escapeHtmlSimple(preset.email) + '"' : '';
     const html = `
       <form class="auth-form" id="authForm" autocomplete="on">
         ${noticeHtml}
@@ -1860,10 +1901,10 @@
       settings: {
         enabled: settings.enabled,
         rulesets: settings.rulesets,
-        cosmetic: settings.cosmetic,
         antiDetect: settings.antiDetect,
         assist: settings.assist,
-        showBadge: settings.showBadge
+        showBadge: settings.showBadge,
+        subscriptionInterval: settings.subscriptionInterval
       },
       whitelist: {
         disabledSites: settings.disabledSites || [],
@@ -1874,12 +1915,32 @@
     };
   }
 
+  // 「云端同步」里那四个勾选框的真实效果。
+  // 整行 upsert 会把没提供的列写成 null，所以未勾选的块不能靠「不传」来保持不动，
+  // 必须把云端现有值原样读回来填进去。
+  const SYNC_PREF_KEY = "adshield_sync_prefs";
+  async function readSyncPrefs() {
+    let p = null;
+    try { p = (await chrome.storage.local.get(SYNC_PREF_KEY))[SYNC_PREF_KEY]; } catch (e) {}
+    p = p || {};
+    return {
+      settings: p.settings !== false,
+      whitelist: p.whitelist !== false,
+      user_rules: p.user_rules !== false,
+      subscriptions: p.subscriptions !== false
+    };
+  }
+  function anySyncOff(prefs) {
+    return !(prefs.settings && prefs.whitelist && prefs.user_rules && prefs.subscriptions);
+  }
+
   // 上传到云端（走 401→刷新→重试一次的路径）
   // 只取云端的 updated_at，用于上传前判断是否被别的设备改过
   async function fetchCloudUpdatedAt(token, userId) {
     const url = SUPABASE_URL + SUPABASE_TABLE + "?user_id=eq." + userId + "&select=updated_at";
     const resp = await withAuthRetry((tk) => fetch(url, {
-      headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": "Bearer " + tk }
+      headers: { "apikey": SUPABASE_ANON_KEY, "Authorization": "Bearer " + tk },
+      signal: AbortSignal.timeout(NET_TIMEOUT_MS)
     }), token);
     if (!resp.ok) return 0;
     const rows = await resp.json().catch(() => null);
@@ -1905,7 +1966,29 @@
         // 探测失败（网络等）不阻塞正常上传
       }
     }
+    const prefs = await readSyncPrefs();
     const data = await collectLocalData();
+    if (anySyncOff(prefs)) {
+      let cloudRow = null;
+      let readFailed = false;
+      try {
+        cloudRow = await pullFromCloud(token, userId);
+      } catch (e) {
+        readFailed = true;
+        console.log("[AdShield Sync] 读取云端原值失败:", (e && e.message) || e);
+      }
+      if (readFailed) {
+        // 读不到云端现值就没法保证未勾选的块不被覆盖，中止本次上传比赌一把安全
+        throw new Error("读不到云端配置，为避免误删未勾选的项目，本次上传已取消");
+      }
+      // cloudRow 为 null 表示云端还没有记录（首次上传），没有旧值需要保留
+      if (cloudRow) {
+        if (!prefs.settings) data.settings = cloudRow.settings || {};
+        if (!prefs.whitelist) data.whitelist = cloudRow.whitelist || {};
+        if (!prefs.user_rules) data.user_rules = cloudRow.user_rules || [];
+        if (!prefs.subscriptions) data.subscriptions = cloudRow.subscriptions || [];
+      }
+    }
     const body = JSON.stringify({
       user_id: userId,
       settings: data.settings,
@@ -1922,7 +2005,8 @@
         "Content-Type": "application/json",
         "Prefer": "resolution=merge-duplicates,return=minimal"
       },
-      body: body
+      body: body,
+      signal: AbortSignal.timeout(NET_TIMEOUT_MS)
     }), token);
     if (!resp.ok) {
       const err = await resp.text();
@@ -1943,7 +2027,8 @@
       headers: {
         "apikey": SUPABASE_ANON_KEY,
         "Authorization": "Bearer " + tk
-      }
+      },
+      signal: AbortSignal.timeout(NET_TIMEOUT_MS)
     }), token);
     if (!resp.ok) throw new Error("拉取失败：" + resp.status);
     const rows = await resp.json();
@@ -1968,7 +2053,8 @@
         const r = await fetch(SUPABASE_URL + "/auth/v1/token?grant_type=refresh_token", {
           method: "POST",
           headers: { "apikey": SUPABASE_ANON_KEY, "Content-Type": "application/json" },
-          body: JSON.stringify({ refresh_token: state.refreshToken })
+          body: JSON.stringify({ refresh_token: state.refreshToken }),
+          signal: AbortSignal.timeout(NET_TIMEOUT_MS)
         });
         if (!r.ok) return false;
         const d = await r.json();
@@ -1979,22 +2065,37 @@
           refreshToken: d.refresh_token || st.refreshToken
         }));
         return true;
-      } catch (e) { return false; }
+      } catch (e) {
+        // 连不上 ≠ 凭据失效，返回独立状态，交给调用方区分处理
+        return isOfflineError(e) ? "offline" : false;
+      }
     })();
     try { return await __refreshPromise; } finally { __refreshPromise = null; }
   }
 
-  // 刷新彻底失败：必须让用户看见（showAlert + 触发已存在的 auth-changed 事件）
-  function notifyAuthExpired() {
-    const now = Date.now();
-    if (now - __authExpiredWarnAt < 60000) return;   // 60 秒内只提示一次，避免刷屏
-    __authExpiredWarnAt = now;
+  // 刷新彻底失败（服务端明确拒绝）：必须真的退出登录。
+  // 只弹一句提示而不清登录态的话，界面会一直显示「已登录」，而之后每一次同步都 401，
+  // 会话又靠活跃时间续期，用户永远等不到自动登出，也就没有任何自救入口。
+  async function forceRelogin() {
+    try { await chrome.storage.local.remove("adshield_session_expired_notified"); } catch (e) {}
+    try { await setAuthState(null); } catch (e) {}
+    try { window.dispatchEvent(new Event("adshield:auth-changed")); } catch (e) {}
     try {
       if (typeof showAlert === "function") {
-        showAlert("登录已过期，请重新登录。", { title: "登录已过期", type: "warning" });
+        showAlert("登录状态已失效，请重新登录后再同步。", { title: "需要重新登录", type: "warning" });
       }
     } catch (e) {}
-    try { window.dispatchEvent(new Event("adshield:auth-changed")); } catch (e) {}
+  }
+
+  // 只是连不上：保留登录态，把「没同步」说清楚
+  function notifyOffline(detail) {
+    const now = Date.now();
+    if (now - __authExpiredWarnAt < 60000) return;
+    __authExpiredWarnAt = now;
+    console.log("[AdShield Sync] 网络不可用，本次同步未执行:", detail && (detail.message || detail) || "");
+    try {
+      if (typeof showSyncToast === "function") showSyncToast("网络不可用，未同步");
+    } catch (e) {}
   }
 
   // doRequest(token) 返回 fetch Response；401 且有 refreshToken 时刷新后只重试一次
@@ -2005,14 +2106,16 @@
     if (resp && resp.status === 401) {
       if (state && state.refreshToken) {
         const ok = await refreshAccessToken();
-        if (ok) {
+        if (ok === true) {
           const st2 = await getAuthState();
           resp = await doRequest(st2 && st2.token);   // 只重试一次
+        } else if (ok === "offline") {
+          notifyOffline();
         } else {
-          notifyAuthExpired();
+          await forceRelogin();
         }
       } else {
-        notifyAuthExpired();
+        await forceRelogin();
       }
     }
     return resp;
@@ -2026,14 +2129,19 @@
     return /^[a-z0-9.-]+\.[a-z]{2,}$/.test(h);
   }
 
-  // user_rules：数组；每项 string；≤300；无控制字符与 <>；总条数 ≤2000
+  // 只拒「会让规则坏掉」的字符：除 \t \n \r 之外的控制字符。
+  // 绝不能拒 < > —— 元素隐藏规则 example.com##.ad > .banner 和 CSS 声明里它们是合法字符，
+  // 而这里拒掉的条目会被写回本地、再触发自动上传推回云端，等于把用户的规则永久删掉。
+  const RULE_CTRL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/;
+
+  // user_rules：数组；每项 string；≤1000 字符；总条数 ≤5000
   function sanitizeCloudUserRules(arr) {
     const res = { list: [], rejected: 0 };
     if (!Array.isArray(arr)) { if (arr != null) res.rejected = 1; return res; }
     for (let i = 0; i < arr.length; i++) {
       const r = arr[i];
-      if (typeof r !== "string" || r.length > 300 || /[\u0000-\u001F\u007F<>]/.test(r)) { res.rejected++; continue; }
-      if (res.list.length >= 2000) { res.rejected++; continue; }   // 超过总条数上限
+      if (typeof r !== "string" || r.length > 1000 || RULE_CTRL_CHARS.test(r)) { res.rejected++; continue; }
+      if (res.list.length >= 5000) { res.rejected++; continue; }   // 超过总条数上限
       res.list.push(r);
     }
     return res;
@@ -2051,7 +2159,13 @@
       if (!/^https:\/\//.test(url) || url.length > 500) { res.rejected++; continue; }
       try { new URL(url); } catch (e) { res.rejected++; continue; }
       const m = ((Number(sub.id) || 0) % 100);   // 沿用后台 ID 约定
-      res.list.push(Object.assign({}, sub, { url: url, id: (m >= 1 && m <= 99) ? m : 1 }));
+      // 只重建已知键：云端行里的额外键不能原样透传，否则一条脏数据就能改写后台消费的字段
+      res.list.push({
+        url: url,
+        id: (m >= 1 && m <= 99) ? m : 1,
+        name: typeof sub.name === "string" && sub.name.length <= 120 ? sub.name : "",
+        enabled: sub.enabled === false ? false : true
+      });
     }
     return res;
   }
@@ -2137,7 +2251,7 @@
     const wlRes = sanitizeCloudWhitelist(cloud.whitelist);
     const stRes = sanitizeCloudSettings(cloud.settings);
     const rejected = [];
-    if (rulesRes.rejected) rejected.push({ field: "user_rules", count: rulesRes.rejected, reason: "非字符串/超300字符/含控制字符或<>或超过2000条" });
+    if (rulesRes.rejected) rejected.push({ field: "user_rules", count: rulesRes.rejected, reason: "非字符串、超1000字符、含控制字符或超过5000条" });
     if (subsRes.rejected) rejected.push({ field: "subscriptions", count: subsRes.rejected, reason: "订阅须为 https、可解析、≤500字符，最多20条" });
     if (wlRes.rejected) rejected.push({ field: "whitelist", count: wlRes.rejected, reason: "非法主机名，或 pausedUntil 值非有限正整数时间戳" });
     if (stRes.rejected) rejected.push({ field: "settings", count: stRes.rejected, reason: "非白名单键，或 rulesets 非布尔 / subscriptionInterval 越界(0..168)" });
@@ -2149,8 +2263,9 @@
     // 云端确实是空数组（用户主动清空）时仍照常覆盖。
     const wiped = (arr, keptCount) => Array.isArray(arr) && arr.length > 0 && keptCount === 0;
     const keptLocal = [];
-    Object.assign(s, stRes.settings);                                   // settings（仅白名单键）
-    if (cloud.whitelist && typeof cloud.whitelist === "object") {        // 仅当云端提供时才覆盖
+    const prefs = await readSyncPrefs();
+    if (prefs.settings) Object.assign(s, stRes.settings);                       // settings（仅白名单键）
+    if (prefs.whitelist && cloud.whitelist && typeof cloud.whitelist === "object") {   // 仅当云端提供且本地开了这项时才覆盖
       if (wiped(cloud.whitelist.disabledSites, wlRes.disabledSites.length)) {
         keptLocal.push("disabledSites");
       } else {
@@ -2164,12 +2279,16 @@
         s.pausedUntil = wlRes.pausedUntil;
       }
     }
-    if (Array.isArray(cloud.subscriptions)) {
+    if (prefs.subscriptions && Array.isArray(cloud.subscriptions)) {
       if (wiped(cloud.subscriptions, subsRes.list.length)) keptLocal.push("subscriptions");
       else s.subscriptions = subsRes.list;
     }
+    // 拉取写本地 → storage.onChanged → 自动上传，会把刚拉下来的数据又推回云端。
+    // 这一趟往返不仅多余，还会把「校验时丢掉的少数条目」以偏概全地覆盖掉云端原文，
+    // 所以写入前先开一个抑制窗口，把这一轮回环挡掉（窗口结束后照常上传）。
+    suppressAutoUpload(8000);
     await chrome.storage.local.set({ adshield_settings: s });
-    if (Array.isArray(cloud.user_rules)) {                               // 写入的是校验后的值
+    if (prefs.user_rules && Array.isArray(cloud.user_rules)) {              // 写入的是校验后的值
       if (wiped(cloud.user_rules, rulesRes.list.length)) keptLocal.push("user_rules");
       else await chrome.storage.local.set({ adshield_user_rules: rulesRes.list });
     }
@@ -2199,7 +2318,17 @@
   let __autoUploadTimer = 0;
   let __autoUploadLast = 0;
   let __autoUploadRetry = 0;
+  // 刚拉取完云端时，抑制「写本地 → 自动上传」这一轮回环的截止时间
+  let __suppressUploadUntil = 0;
+  function suppressAutoUpload(ms) {
+    __suppressUploadUntil = Math.max(__suppressUploadUntil, Date.now() + ms);
+  }
   async function autoUpload() {
+    // 抑制窗口内不硬拦：延后到窗口结束后再传，否则这段时间里用户的真实改动会被漏掉
+    if (Date.now() < __suppressUploadUntil) {
+      scheduleAutoUpload(__suppressUploadUntil - Date.now() + 600);
+      return;
+    }
     const state = await getAuthState();
     if (!state || state.mode === "local" || !state.token || !state.userId) return;
     // 3 秒内的重复触发合并掉
@@ -2219,7 +2348,13 @@
         showSyncToast("云端有更新，本次改动未上传");
         return;   // 冲突不自动重试，等用户在账号页处理
       }
-      console.warn("[AdShield Sync] 自动上传失败:", e);
+      if (isOfflineError(e)) {
+        console.log("[AdShield Sync] 自动上传未成功（网络不可用）:", e.message || e);
+        showSyncToast("网络不可用，改动已存本地");
+      } else {
+        console.warn("[AdShield Sync] 自动上传失败:", e);
+        showSyncToast("同步失败：" + (e && e.message ? e.message : e));
+      }
       // 30 秒后重试一次，避免改完没换设备就永远不同步
       if (!__autoUploadRetry) {
         __autoUploadRetry = setTimeout(() => {
@@ -2230,12 +2365,13 @@
     }
   }
 
-  function scheduleAutoUpload() {
+  function scheduleAutoUpload(delay) {
     if (__autoUploadTimer) clearTimeout(__autoUploadTimer);
+    const wait = (typeof delay === "number" && delay >= 0) ? delay : 5000;
     __autoUploadTimer = setTimeout(() => {
       __autoUploadTimer = 0;
       autoUpload();
-    }, 5000);   // 5 秒防抖
+    }, wait);
   }
 
   // 右下角轻提示
@@ -2303,8 +2439,9 @@
     }
   }
 
-  async function doSync(direction) {
+  async function doSync(direction, opts) {
     // direction: "pull" | "push" | "both"
+    opts = opts || {};
     const hint = document.getElementById("syncHint");
     const state = await getAuthState();
     if (!state) return;
@@ -2329,15 +2466,50 @@
       const userId = state.userId;
       if (!userId) throw new Error("缺少用户 ID");
 
-      // push：上传本地到云端（用户手动点的，force 跳过冲突检查）
+      // push：上传本地到云端
       if (direction === "push" || direction === "both") {
-        await pushToCloud(token, userId, { force: true });
+        if (opts.askOnConflict) {
+          // 手动上传以前一律 force，另一台设备改的配置会被静默覆盖掉。
+          // 现在先探测，确有冲突就问一次，用户坚持才覆盖。
+          try {
+            await pushToCloud(token, userId);
+          } catch (e) {
+            if (!e || e.code !== "CLOUD_NEWER") throw e;
+            const go = await showConfirm(
+              "云端配置比本地新（可能在别的设备上改过）。\n\n" +
+              "「仍然上传」＝用本地覆盖云端，云端那份改动会丢失；\n" +
+              "「取消」＝先不上传，可改用「从云端恢复」把两边对齐。",
+              { title: "上传会覆盖云端", confirmText: "仍然上传", cancelText: "取消", type: "warning" }
+            );
+            if (!go) {
+              if (hint) {
+                hint.textContent = "已取消，本地未上传";
+                hint.className = "hint";
+                setTimeout(() => { hint.textContent = ""; }, 4000);
+              }
+              return;
+            }
+            await pushToCloud(token, userId, { force: true });
+          }
+        } else {
+          await pushToCloud(token, userId, { force: true });
+        }
       }
       // pull：从云端拉取（both 时不覆盖本地，先 push 后 pull 会拿到自己数据）
       if (direction === "pull") {
         const cloud = await pullFromCloud(token, userId);
         if (cloud) {
-          await applyCloudData(cloud);
+          const res = await applyCloudData(cloud);
+          // 用户在冲突框里选了「保留本地」，此时什么都没改，不能再报「同步成功」
+          if (res && res.skipped) {
+            if (hint) {
+              hint.textContent = "已保留本地，未做改动";
+              hint.className = "hint";
+              setTimeout(() => { hint.textContent = ""; }, 4000);
+            }
+            renderAccount();
+            return;
+          }
         } else {
           if (hint) {
             hint.textContent = "⚠️ 云端暂无数据，请先上传";
@@ -2371,6 +2543,9 @@
     register: () => showAuthDialog("register"),
     logout: doLogout,
     sync: doSync,
+    exportBackup: exportAllData,
+    importBackup: importAllData,
+    readSyncPrefs: readSyncPrefs,
     isReady: isSupabaseReady
   };
 
@@ -2532,7 +2707,7 @@
       if (typeof window.renderOptionsUI === "function") window.renderOptionsUI();
       else location.reload();
     });
-    if (btnUpload) btnUpload.addEventListener("click", () => doSync("push"));
+    if (btnUpload) btnUpload.addEventListener("click", () => doSync("push", { askOnConflict: true }));
 
     // 首次渲染：延迟 300ms（让骨架屏展示一下）
     setTimeout(() => renderAccount(), 300);

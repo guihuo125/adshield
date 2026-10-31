@@ -28,18 +28,13 @@
         const existing = Object.getOwnPropertyDescriptor(window, key);
         if (existing && existing.configurable === false) continue;
 
-        const fakeGetter = function () {
-          // 返回函数形式的探测值（部分脚本会调用 adBlockDetected()）
-          const v = values[key];
-          return typeof v === "function" ? v : v;
-        };
-
+        // 用普通数据属性，不用 getter/setter：
+        // 反拦截检测库只要查一次 Object.getOwnPropertyDescriptor(window, key).get 是否存在，
+        // 就能认出这里在伪装——那比不做伪装更容易暴露。数据属性与页面自己赋值的形态一致，
+        // 页面后续写入也照常生效（原先 setter 同步 values 的作用，writable 天然覆盖）。
         Object.defineProperty(window, key, {
-          get: fakeGetter,
-          set: function (v) {
-            // 页面尝试写该变量时：同步内部值（防止检测脚本发现"只读被绕过"）
-            values[key] = v;
-          },
+          value: values[key],
+          writable: true,
           enumerable: false,        // 隐藏枚举
           configurable: true
         });

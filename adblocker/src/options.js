@@ -132,7 +132,7 @@ async function checkUpdate() {
       statusHtml =
         '<div class="cl-status cl-status-update">' +
           '<div class="cl-status-title">🎉 发现新版本</div>' +
-          '<div class="cl-status-desc">最新版本 <b>v' + latestVersion + '</b> · 当前版本 v' + currentVersion + '</div>' +
+          '<div class="cl-status-desc">最新版本 <b>v' + escapeHtmlSimple(latestVersion) + '</b> · 当前版本 v' + escapeHtmlSimple(currentVersion) + '</div>' +
           downloadBlock +
         '</div>';
     } else if (isDev) {
@@ -161,7 +161,7 @@ async function checkUpdate() {
       const body = r.body || "（无说明）";
       logsHtml += '<div class="changelog-item">';
       logsHtml += '<div class="changelog-head">';
-      logsHtml += '<span class="changelog-tag">' + tag + '</span>';
+      logsHtml += '<span class="changelog-tag">' + escapeHtmlSimple(tag) + '</span>';
       logsHtml += '<span class="changelog-name">' + escapeHtmlSimple(name) + '</span>';
       if (isCurrent) logsHtml += '<span class="changelog-badge">当前版本</span>';
       logsHtml += '<span class="changelog-date">' + date + '</span>';
@@ -238,7 +238,8 @@ document.addEventListener("click", (e) => {
 // 轻量 Markdown → HTML（只处理常见语法）
 function simpleMarkdown(md) {
   if (!md) return "";
-  const esc = (s) => String(s).replace(/[&<>]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[c]));
+  // 必须连引号一起转义：正文会被拼进 href="..." 这类属性里，只转 &<> 会被一个 " 顶穿
+  const esc = (s) => String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[c]));
   const lines = String(md).split(/\r?\n/);
   const html = [];
   let inList = false;
@@ -464,7 +465,9 @@ function renderGroup(listSel, countSel, cardSel, items, emptyText) {
   if (!wrap) return;
 
   if (countEl) countEl.textContent = items.length;
-  if (cardEl) cardEl.style.display = items.length ? "" : "none";
+  // 空列表时不藏整张卡片：卡片一藏，里面的「暂无...网站」空态文案也一起没了，
+  // 页面看起来像坏了
+  if (cardEl) cardEl.style.display = "";
 
   wrap.innerHTML = "";
   if (!items.length) {
@@ -545,7 +548,11 @@ function setupSiteEvents() {
   if (clearBtn) {
     clearBtn.addEventListener("click", async () => {
       const s = await readSettings();
-      const total = s.disabledSites.length + Object.keys(s.pausedUntil).length;
+      // 只数列表里真的看得见的：过期的暂停项在 renderSites 里已被过滤，
+      // 若这里还算上，确认框会说「清空 9 个」而列表只有 5 行
+      const nowTs = Date.now();
+      const livePaused = Object.keys(s.pausedUntil || {}).filter(h => (s.pausedUntil[h] || 0) > nowTs).length;
+      const total = s.disabledSites.length + livePaused;
       if (!total) return;   // 空列表时按钮已禁用，这里兜底
       const ok = await showConfirm(`确定清空全部 ${total} 个白名单网站？`, {
         title: "清空白名单",
@@ -578,7 +585,7 @@ async function renderTrackers() {
     const li = document.createElement("li");
     li.innerHTML = `
       <div class="tb-row">
-        <span class="tb-host">${host}</span>
+        <span class="tb-host">${escapeHtml(host)}</span>
         <span class="tb-count">${cnt}</span>
       </div>
       <div class="tb-bar"><div class="tb-fill" style="width:${(cnt / max * 100).toFixed(1)}%"></div></div>
@@ -694,7 +701,7 @@ async function renderReport() {
       const li = document.createElement("li");
       li.innerHTML = `
         <div class="tb-row">
-          <span class="tb-host">${host}</span>
+          <span class="tb-host">${escapeHtml(host)}</span>
           <span class="tb-count">${cnt}</span>
         </div>
         <div class="tb-bar"><div class="tb-fill" style="width:${(cnt / pmax * 100).toFixed(1)}%"></div></div>
@@ -1041,8 +1048,11 @@ async function renderCosmeticRules() {
       arr.splice(idx, 1);
       await chrome.storage.local.set({ "adshield_user_cosmetic": arr });
       const store2 = await chrome.storage.local.get("adshield_user_rules");
-      const userRules = (store2.adshield_user_rules || []).filter(r => r !== raw);
-      await chrome.storage.local.set({ "adshield_user_rules": userRules });
+      const userRules = (store2.adshield_user_rules || []).slice();
+      // 按值整批过滤会把「同一行写了两次」一起删掉，这里只摘掉其中一条
+      const at = userRules.lastIndexOf(raw);
+      if (at >= 0) userRules.splice(at, 1);
+      // 规则本体交给 background 写：这边再 set 一次会和应用流程抢同一个键
       await chrome.runtime.sendMessage({ type: "saveUserRules", rules: userRules });
       await renderCosmeticRules();
       await loadUserRules();
@@ -1057,14 +1067,19 @@ const saveBtn = $("#saveBtn");
 if (saveBtn) {
   saveBtn.addEventListener("click", async () => {
     const lines = ($("#rulesInput").value || "").split("\n").map(l => l.trim()).filter(Boolean);
-    await chrome.storage.local.set({ "adshield_user_rules": lines });
+    // saveUserRules 内部会写这个键；这边先写一遍会让 onChanged 与应用流程各跑一次
     const resp = await chrome.runtime.sendMessage({ type: "saveUserRules", rules: lines });
     const st = $("#status");
-    const r = (resp && resp.result) || {};
-    let msg = "已应用 " + (r.applied || 0) + " 条";
-    if (r.cosmetic) msg += "，元素隐藏 " + r.cosmetic + " 条";
-    if (r.skipped && r.skipped.length) msg += "，跳过 " + r.skipped.length + " 条";
-    if (st) {
+    // 值有变化时 background 只回 pending，真正的应用结果要等它落盘（见 setupUserRulesResultHint）。
+    // 这里若照旧读 resp.result，就会在什么都没应用的情况下显示「已应用 0 条 ✓」。
+    if (st && resp && resp.pending) {
+      st.textContent = "正在应用规则…";
+      st.className = "status busy";
+    } else if (st) {
+      const r = (resp && resp.result) || {};
+      let msg = "已应用 " + (r.applied || 0) + " 条";
+      if (r.cosmetic) msg += "，元素隐藏 " + r.cosmetic + " 条";
+      if (r.skipped && r.skipped.length) msg += "，跳过 " + r.skipped.length + " 条";
       st.textContent = msg + " ✓";
       setTimeout(() => { st.textContent = ""; }, 3500);
     }
@@ -1302,9 +1317,29 @@ async function loadSubscriptions(opts) {
   }
 
   const resp = await sendMessage("getSubscriptions");
-  if (!resp.ok) return;
+  if (!resp || !resp.ok) {
+    // 三条骨架是 HTML 里写死的，只 return 的话页面会永远停在「加载中」，
+    // 用户既看不到失败也不知道可以再试一次
+    const ul = $("#subList");
+    if (ul) {
+      ul.innerHTML = "";
+      const li = document.createElement("li");
+      li.className = "sub-item";
+      const msg = document.createElement("span");
+      msg.textContent = "订阅列表没读到：" + ((resp && resp.error) || "后台未响应");
+      const retry = document.createElement("button");
+      retry.className = "item-action primary";
+      retry.textContent = "重试";
+      retry.addEventListener("click", () => loadSubscriptions({ force: true }));
+      li.appendChild(msg);
+      li.appendChild(retry);
+      ul.appendChild(li);
+    }
+    return;
+  }
   const subs = resp.subscriptions || [];
-  const interval = resp.interval || 24;
+  // 「关闭」就是 0，不能用 || 24 把它读成 24，否则下拉框显示每 24 小时、实际从不自动更新
+  const interval = typeof resp.interval === "number" ? resp.interval : 24;
   const lastCheck = resp.lastCheck || 0;
 
   // 更新缓存
@@ -1397,8 +1432,8 @@ function renderSubsList(subs, interval, lastCheck) {
         "</div>" +
       "</div>" +
       "<div style='display:flex;gap:4px'>" +
-        "<button class='item-action primary' data-update='" + sub.id + "'>更新</button>" +
-        "<button class='item-action' data-remove='" + sub.id + "'>删除</button>" +
+        "<button class='item-action primary' data-update='" + escapeHtml(sub.id) + "'>更新</button>" +
+        "<button class='item-action' data-remove='" + escapeHtml(sub.id) + "'>删除</button>" +
       "</div>";
 
     // 有更新时：加边框高亮
@@ -1683,29 +1718,252 @@ if (restoreBtn) {
           restoreBtn.textContent = resp.message || "已存在";
           setTimeout(() => {
             restoreBtn.disabled = false;
-            restoreBtn.textContent = "恢复推荐订阅（4 个）";
+            restoreBtn.textContent = "恢复推荐订阅（" + Object.keys(PRESET_SUBS).length + " 个）";
           }, 2000);
         }
       } else {
         restoreBtn.textContent = "失败：" + ((resp && resp.error) || "未知错误");
         setTimeout(() => {
           restoreBtn.disabled = false;
-          restoreBtn.textContent = "恢复推荐订阅（4 个）";
+          restoreBtn.textContent = "恢复推荐订阅（" + Object.keys(PRESET_SUBS).length + " 个）";
         }, 3000);
       }
     } catch (e) {
       restoreBtn.textContent = "失败：" + e.message;
       setTimeout(() => {
         restoreBtn.disabled = false;
-        restoreBtn.textContent = "恢复推荐订阅（4 个）";
+        restoreBtn.textContent = "恢复推荐订阅（" + Object.keys(PRESET_SUBS).length + " 个）";
       }, 3000);
     }
   });
 }
 
+
+/* ============ 下载 helper ============ */
+function downloadFile(filename, text, mime) {
+  const blob = new Blob([text], { type: (mime || "application/json") + ";charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+function stampDate() { return new Date().toISOString().slice(0, 10); }
+function setStatus(text, kind) {
+  const st = $("#status");
+  if (!st) return;
+  st.textContent = text || "";
+  st.className = "status" + (kind ? " " + kind : "");
+}
+
+/* ============ 导入 / 导出卡片 ============ */
+function setupBackup() {
+  const btnExport = $("#exportAllBtn");
+  const btnImport = $("#importAllBtn");
+  const fileEl = $("#importFile");
+  const out = $("#importStatus");
+  const say = (text, ok) => {
+    if (!out) return;
+    out.textContent = text;
+    out.className = "status" + (ok ? "" : " err");
+    if (text) setTimeout(() => { out.textContent = ""; }, 8000);
+  };
+  const api = () => (window.adshieldAuth && typeof window.adshieldAuth.exportBackup === "function") ? window.adshieldAuth : null;
+
+  if (btnExport) btnExport.addEventListener("click", async () => {
+    const A = api();
+    if (!A) { say("备份模块未就绪", false); return; }
+    btnExport.disabled = true;
+    try {
+      const r = await A.exportBackup();
+      say("已导出 " + r.count + " 项配置（" + Math.max(1, Math.round(r.size / 1024)) + " KB）", true);
+    } catch (e) {
+      say("导出失败：" + (e.message || e), false);
+    } finally { btnExport.disabled = false; }
+  });
+
+  if (btnImport && fileEl) {
+    btnImport.addEventListener("click", () => fileEl.click());
+    fileEl.addEventListener("change", async () => {
+      const file = fileEl.files && fileEl.files[0];
+      if (!file) return;
+      const A = api();
+      if (!A) { say("备份模块未就绪", false); fileEl.value = ""; return; }
+      const ok = await showConfirm(
+        "导入会覆盖当前的设置、自定义规则、白名单和统计，且无法撤销。\n\n文件：" + file.name,
+        { title: "导入备份", confirmText: "导入并覆盖", cancelText: "取消", type: "warning" }
+      );
+      if (!ok) { fileEl.value = ""; return; }
+      try {
+        const r = await A.importBackup(file);
+        say("已导入 " + r.count + " 项配置", true);
+        await render();
+      } catch (e) {
+        say("导入失败：" + (e.message || e), false);
+      } finally { fileEl.value = ""; }
+    });
+  }
+}
+
+/* ============ 元素隐藏规则导出 TXT ============ */
+function setupCosmeticExport() {
+  const btn = $("#exportCosmeticBtn");
+  if (!btn) return;
+  btn.addEventListener("click", async () => {
+    const store = await chrome.storage.local.get("adshield_user_cosmetic");
+    const rules = store.adshield_user_cosmetic || [];
+    if (!rules.length) {
+      setStatus("没有可导出的元素隐藏规则", "busy");
+      setTimeout(() => setStatus(""), 3500);
+      return;
+    }
+    const text = "! AdShield 元素隐藏规则导出于 " + stampDate() + "\n" +
+      rules.filter(r => typeof r === "string").join("\n") + "\n";
+    downloadFile("adshield-cosmetic-" + stampDate() + ".txt", text, "text/plain");
+    setStatus("已导出 " + rules.length + " 条元素隐藏规则 ✓");
+    setTimeout(() => setStatus(""), 3500);
+  });
+}
+
+/* ============ 报告页：导出统计 / 重置 ============ */
+function setupReportActions() {
+  const STATS_KEY = "adshield_stats";
+  const exp = $("#exportBtn");
+  if (exp) exp.addEventListener("click", async () => {
+    const store = await chrome.storage.local.get(STATS_KEY);
+    const stats = store[STATS_KEY] || {};
+    const report = {
+      _meta: { app: "AdShield", version: chrome.runtime.getManifest().version, exportedAt: new Date().toISOString() },
+      total: stats.total || 0,
+      byDate: stats.byDate || {},
+      byCategory: stats.byCategory || {},
+      byBlocked: stats.byBlocked || {},
+      recentLogs: (stats.recentLogs || []).slice(0, 1000)
+    };
+    downloadFile("adshield-stats-" + stampDate() + ".json", JSON.stringify(report, null, 2));
+    setStatus("已导出统计数据（" + (report.recentLogs.length) + " 条明细）✓");
+    setTimeout(() => setStatus(""), 4000);
+  });
+
+  const reset = $("#resetStatsBtn");
+  if (reset) reset.addEventListener("click", async () => {
+    const ok = await showConfirm(
+      "确定清空全部拦截统计？\n\n只影响数字和图表，不影响拦截本身，也无法撤销。",
+      { title: "重置统计", confirmText: "清空", cancelText: "取消", type: "warning" }
+    );
+    if (!ok) return;
+    const resp = await sendMessage("resetStats", {});
+    if (resp && resp.ok === false) {
+      setStatus("重置失败：" + (resp.error || "未知错误"), "err");
+      setTimeout(() => setStatus(""), 4000);
+      return;
+    }
+    setStatus("统计已清空 ✓");
+    setTimeout(() => setStatus(""), 3000);
+    await render();
+  });
+}
+
+/* ============ 订阅自动更新间隔 ============ */
+function setupSubscriptionInterval() {
+  const sel = $("#subIntervalSelect");
+  if (!sel) return;
+  sel.addEventListener("change", async () => {
+    const hours = parseInt(sel.value, 10);
+    if (!Number.isFinite(hours) || hours < 0) return;
+    const hint = $("#subHint");
+    const label = hours === 0 ? "不自动更新" : ("每 " + hours + " 小时");
+    const resp = await sendMessage("setSubscriptionInterval", { hours });
+    if (resp && resp.ok === false) {
+      sel.value = String(resp.interval != null ? resp.interval : hours);
+      if (hint) { hint.textContent = "⚠ 更新间隔设置失败：" + (resp.error || "未知错误"); hint.className = "hint err"; }
+      return;
+    }
+    if (hint) hint.textContent = "自动更新已设为" + label;
+    setTimeout(() => { const h = $("#subHint"); if (h) h.textContent = ""; }, 4000);
+  });
+}
+
+/* ============ 云同步项目勾选 ============ */
+const SYNC_ITEMS = [
+  { id: "syncSettings", key: "settings", name: "基础设置" },
+  { id: "syncWhitelist", key: "whitelist", name: "白名单" },
+  { id: "syncRules", key: "user_rules", name: "自定义规则" },
+  { id: "syncSubscriptions", key: "subscriptions", name: "规则订阅" }
+];
+const SYNC_PREF_KEY = "adshield_sync_prefs";
+
+function setupSyncPrefs() {
+  chrome.storage.local.get(SYNC_PREF_KEY).then((store) => {
+    const p = store[SYNC_PREF_KEY] || {};
+    for (const it of SYNC_ITEMS) {
+      const el = document.getElementById(it.id);
+      if (el) el.checked = p[it.key] !== false;
+    }
+  }).catch(() => {});
+
+  for (const it of SYNC_ITEMS) {
+    const el = document.getElementById(it.id);
+    if (!el) continue;
+    el.addEventListener("change", async () => {
+      const store = await chrome.storage.local.get(SYNC_PREF_KEY);
+      const p = store[SYNC_PREF_KEY] || {};
+      p[it.key] = el.checked;
+      await chrome.storage.local.set({ [SYNC_PREF_KEY]: p });
+      const hint = document.getElementById("syncHint");
+      if (hint) {
+        hint.textContent = el.checked
+          ? (it.name + "已加入同步")
+          : (it.name + "不再同步（云端那份会原样保留，不会被删除）");
+        hint.className = "hint";
+        setTimeout(() => { const h = document.getElementById("syncHint"); if (h) h.textContent = ""; }, 6000);
+      }
+    });
+  }
+}
+
+/* ============ 自定义规则应用结果 ============ */
+const USER_RULES_RESULT_KEY = "adshield_user_rules_result";
+
+function showRulesResult(r) {
+  if (!r) return;
+  if (r.pending) { setStatus("正在应用规则…", "busy"); return; }
+  if (r.ok === false) { setStatus("⚠ 规则未能生效：" + (r.error || "未知错误"), "err"); return; }
+  const res = r.result || {};
+  const sk = res.skipped || [];
+  let msg = "已应用 " + (res.applied || 0) + " 条网络规则";
+  if (res.cosmetic) msg += "、" + res.cosmetic + " 条元素隐藏";
+  if (sk.length) msg += "；" + sk.length + " 条未生效（" + (sk[0].reason || "解析失败") + "：" + (sk[0].line || "").slice(0, 40) + "）";
+  setStatus(msg);
+  setTimeout(() => setStatus(""), 8000);
+}
+
+function setupUserRulesResultHint() {
+  chrome.storage.local.get(USER_RULES_RESULT_KEY)
+    .then((st) => showRulesResult(st[USER_RULES_RESULT_KEY]))
+    .catch(() => {});
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area === "local" && changes[USER_RULES_RESULT_KEY]) showRulesResult(changes[USER_RULES_RESULT_KEY].newValue);
+  });
+}
+
+function setupMissingControls() {
+  setupBackup();
+  setupCosmeticExport();
+  setupReportActions();
+  setupSubscriptionInterval();
+  setupSyncPrefs();
+  setupUserRulesResultHint();
+}
+
 /* ============ 初始化 ============ */
 // 绑定分规则集开关事件（只绑一次）
 initRulesetToggles();
+// 绑定此前存在但没有任何代码接线的控件（导入导出、报告操作、同步勾选、更新间隔）
+setupMissingControls();
 // 首次渲染
 render();
 

@@ -84,41 +84,67 @@ function buildMenuRow({ label, color, checked, disabled }) {
   `;
   return row;
 }
-function renderMenuLists(s) {
-  const rl = $("#rulesetList");
-  rl.innerHTML = "";
-  for (const r of RULESETS) {
-    const row = buildMenuRow({
-      label: r.label, color: r.color,
-      checked: s.rulesets[r.id] !== false,
-      disabled: !s.enabled
-    });
+/* 列表只构建一次，之后每次 render 只同步开关状态。
+   原先每 2 秒的轮询都把整段 innerHTML="" 重建：点击若正好落在重建当口就被吞掉，
+   而写盘还没回来时，旧 storage 的值又会把开关覆写回去（看起来像"啪一下弹回去"）。 */
+const __menuRows = {};
+function ensureMenuRows(container, items) {
+  if (!container) return null;
+  if (__menuRows[container.id]) return __menuRows[container.id];
+  const rows = [];
+  for (const it of items) {
+    const row = buildMenuRow(it);
     const input = row.querySelector("input");
-    input.addEventListener("change", async () => {
-      const cur = await readSettings();
-      cur.rulesets[r.id] = input.checked;
-      await writeSettings(cur);
+    const ref = { input, spec: it, pending: false };
+    input.addEventListener("change", () => {
+      ref.pending = true;   // 等写盘回来之前，不让轮询用旧值把这个开关覆写回去
+      Promise.resolve(it.onChange(input.checked)).then(undefined, (e) => {
+        console.error("[AdShield popup] 开关保存失败:", e);
+      }).finally(() => { ref.pending = false; });
     });
-    rl.appendChild(row);
+    container.appendChild(row);
+    rows.push(ref);
   }
+  __menuRows[container.id] = rows;
+  return rows;
+}
+
+function syncMenuRows(rows, items) {
+  if (!rows) return;
+  for (let i = 0; i < rows.length; i++) {
+    const st = items[i];
+    if (!st) continue;
+    if (rows[i].input.disabled !== st.disabled) rows[i].input.disabled = st.disabled;
+    if (!rows[i].pending && rows[i].input.checked !== st.checked) rows[i].input.checked = st.checked;
+  }
+}
+
+function renderMenuLists(s) {
+  const ruleItems = RULESETS.map((r) => ({
+    label: r.label, color: r.color,
+    checked: s.rulesets[r.id] !== false,
+    disabled: !s.enabled,
+    onChange: async (checked) => {
+      const cur = await readSettings();
+      cur.rulesets[r.id] = checked;
+      await writeSettings(cur);
+    }
+  }));
+  syncMenuRows(ensureMenuRows($("#rulesetList"), ruleItems), ruleItems);
 
   const fl = $("#featureList");
   if (!fl) return;   // 「功能」分区已从 popup 移除
-  fl.innerHTML = "";
-  for (const f of FEATURES) {
-    const row = buildMenuRow({
-      label: f.label,
-      checked: s[f.key] !== false,
-      disabled: !s.enabled
-    });
-    const input = row.querySelector("input");
-    input.addEventListener("change", async () => {
+  const featItems = FEATURES.map((f) => ({
+    label: f.label,
+    checked: s[f.key] !== false,
+    disabled: !s.enabled,
+    onChange: async (checked) => {
       const cur = await readSettings();
-      cur[f.key] = input.checked;
+      cur[f.key] = checked;
       await writeSettings(cur);
-    });
-    fl.appendChild(row);
-  }
+    }
+  }));
+  syncMenuRows(ensureMenuRows(fl, featItems), featItems);
 }
 
 /* ---------- Wheel ---------- */
@@ -354,11 +380,11 @@ async function render() {
   // 分类明细 chips
   renderCatChips(byCategory);
 
-  // Menu 内的开关
+  // Menu 内的开关（正在写盘时不覆写，否则 2 秒轮询会用旧值把它拨回去）
   const swGE = $("#swGlobalEnabled");
-  if (swGE) swGE.checked = s.enabled !== false;
+  if (swGE && !swGE.__pending) swGE.checked = s.enabled !== false;
   const swNotify = $("#swNotifyOnBlock");
-  if (swNotify) swNotify.checked = !!s.notifyOnBlock;
+  if (swNotify && !swNotify.__pending) swNotify.checked = !!s.notifyOnBlock;
   renderMenuLists(s);
 
   // 同步白名单按钮文案
@@ -428,9 +454,11 @@ document.addEventListener("click", () => {
 
 // 通知开关
 $("#swNotifyOnBlock").addEventListener("change", async (e) => {
+  e.target.__pending = true;
   const s = await readSettings();
   s.notifyOnBlock = e.target.checked;
   await writeSettings(s);
+  e.target.__pending = false;
   // 首次开启 → 请求通知权限（Chrome 会在首次 create 时自动弹权限）
   if (e.target.checked) {
     try {
@@ -599,10 +627,12 @@ $("#actReport").addEventListener("click", async () => {
 const swGE = $("#swGlobalEnabled");
 if (swGE) {
   swGE.addEventListener("change", async (e) => {
+    e.target.__pending = true;
     const cur = await readSettings();
     cur.enabled = e.target.checked;
     cur.globalPausedUntil = 0;
     await writeSettings(cur);
+    e.target.__pending = false;
     render();
   });
 }
