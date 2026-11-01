@@ -45,6 +45,55 @@ async function getSettings() {
   return s;
 }
 
+/* ============ 全局暂停 ============ */
+// 全局暂停原先只关掉 5 个静态规则集，订阅规则和用户自定义规则（都是动态规则）照旧拦截，
+// 用户看到的现象是「暂停了但页面还是被拦坏」。这里补一条高优先级 allow 动态规则，
+// 把所有请求放行；恢复时移除。
+// ID 选 2000000：躲开用户规则段 100000~110000、站点放行段 200000~210000、
+// 订阅段 300000~1300000，也不会被 cleanupOrphanSubscriptions 当成孤儿删掉。
+const GLOBAL_ALLOW_RULE_ID = 2000000;
+const GLOBAL_ALLOW_PRIORITY = 10000;
+
+async function syncGlobalPauseRule(s) {
+  const paused = s.enabled === false;
+  const rule = {
+    id: GLOBAL_ALLOW_RULE_ID,
+    priority: GLOBAL_ALLOW_PRIORITY,
+    action: { type: "allow" },
+    condition: { urlFilter: "*" }
+  };
+  try {
+    const existing = await chrome.declarativeNetRequest.getDynamicRules();
+    const present = existing.some(r => r.id === GLOBAL_ALLOW_RULE_ID);
+    if (present === paused) return;   // 状态已经对上了
+    if (!paused) {
+      await chrome.declarativeNetRequest.updateDynamicRules({
+        removeRuleIds: [GLOBAL_ALLOW_RULE_ID],
+        addRules: []
+      });
+      console.log("[AdShield] 全局暂停：已恢复拦截");
+      return;
+    }
+    // 删和加拆成两次调用：不依赖 Chrome 对「同一个 ID 同时出现在 remove 和 add 里」的处理顺序，
+    // 也不会因为规则已存在而整批被拒。
+    await chrome.declarativeNetRequest.updateDynamicRules({
+      removeRuleIds: [GLOBAL_ALLOW_RULE_ID],
+      addRules: []
+    });
+    try {
+      await chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds: [], addRules: [rule] });
+    } catch (e2) {
+      // 并发写入时另一路可能已经加好了同一条规则，重复添加会报错；
+      // 这时目标状态已经达成，不算失败。
+      const cur = await chrome.declarativeNetRequest.getDynamicRules();
+      if (!cur.some(r => r.id === GLOBAL_ALLOW_RULE_ID)) throw e2;
+    }
+    console.log("[AdShield] 全局暂停：已放行全部请求（订阅与自定义规则同时停用）");
+  } catch (e) {
+    console.warn("[AdShield] 全局暂停规则更新失败", e);
+  }
+}
+
 /* ============ 规则集同步 ============ */
 async function syncRulesets() {
   const s = await getSettings();
@@ -71,6 +120,8 @@ async function syncRulesets() {
   } catch (e) {
     console.warn("[AdShield] 同步规则集失败", e);
   }
+  // 静态规则集之外的动态规则（订阅 / 用户自定义）也要跟着全局开关走
+  await syncGlobalPauseRule(s);
 }
 
 /* ============ 站点暂停 -> 动态 allowAllRequests ============ */

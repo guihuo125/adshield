@@ -603,6 +603,10 @@ async function renderReport() {
   if (rs && rs.value !== String(__trendRange)) rs.value = String(__trendRange);
 
   const stats = await readStats();
+  // 统计可用性提示：请求级统计依赖开发者模式加载的未打包扩展，正式安装版不产生数据。
+  // 只有明确拿到 live=true 才隐藏说明；拿不到时宁可多提示一句，也别让用户对着空图表猜。
+  const note = $("#reportStatsNote");
+  if (note) note.hidden = stats.live === true;
   const elTotal = $("#repTotal");
   const elPages = $("#repPages");
   const elDomains = $("#repDomains");

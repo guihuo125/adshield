@@ -314,19 +314,32 @@
     }
 
     // ---- 3) 页面文本检测（低准确度，只做兜底）----
-    // 只在明确针对用户的提示语上触发
+    // 只在明确针对用户的提示语上触发。
+    // 早期版本扫的是 body > div / body > section / main —— 文章正文恰好都在这些容器里，
+    // 于是「一篇讲广告拦截的博客」会把自己的站点判成反拦截页并暂停 1 小时。
+    // 现在只在「弹窗 / 提示框」这类容器里找，且容器文本量必须小：
+    // 弹窗文案不会超过几百字，正文容器一定超限。
     const TEXT_SIGNS = [
       "检测到广告拦截", "广告拦截检测", "请关闭广告拦截", "关闭广告屏蔽",
       "请关闭广告屏蔽插件", "请关闭 AdBlock",
       "please disable your adblock", "please turn off your adblock",
       "disable adblock to continue", "we noticed you're using an adblocker"
     ];
+    const DIALOG_SELECTORS = [
+      "[role='dialog']", "[role='alertdialog']",
+      ".modal", ".dialog", ".mask", ".overlay", ".popup", ".tip", ".notice",
+      "[class*='modal']", "[class*='dialog']", "[class*='mask']",
+      "[class*='overlay']", "[class*='popup']", "[class*='notice']", "[class*='banner']"
+    ].join(",");
+    const MAX_SIGN_TEXT = 500;   // 超过这个量级就是正文，不是弹窗
     function checkText() {
       try {
-        // 只在可见的正文块里找（不在 <code>/<pre>/<article> 里，避免误报文章）
-        const zones = document.querySelectorAll("body > div, body > section, main, [role='dialog']");
+        const zones = document.querySelectorAll(DIALOG_SELECTORS);
         for (const z of zones) {
-          const t = (z.textContent || "").slice(0, 20000);
+          const t = (z.textContent || "");
+          if (!t || t.length > MAX_SIGN_TEXT) continue;
+          const r = z.getBoundingClientRect();
+          if (!r.width || !r.height) continue;   // 不可见
           for (const s of TEXT_SIGNS) {
             if (t.includes(s)) { trigger("text:" + s); return; }
           }
@@ -373,7 +386,8 @@
           '<button style="background:none;border:none;cursor:pointer;color:#88898c;font-size:18px;line-height:1;padding:0;margin-top:-2px" data-close>×</button>';
         document.body.appendChild(bar);
         bar.querySelector("[data-close]").addEventListener("click", () => bar.remove());
-        setTimeout(() => { try { bar.remove(); } catch (e) {} }, 5000);
+        // 自动消失时间给足读完 + 点进菜单恢复的余量（原来 5 秒几乎来不及看）
+        setTimeout(() => { try { bar.remove(); } catch (e) {} }, 12000);
       } catch (e) {}
     }
 
