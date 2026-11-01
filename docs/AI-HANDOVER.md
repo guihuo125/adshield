@@ -473,6 +473,8 @@ node D:\temp-adshield-repo\tools\verify-round3-fixes.js
 - [ ] 版本号 +1，且 `manifest.json` 的 version 与发布说明一致
 - [ ] 签名私钥仍在项目目录外（`D://AdShield-Keys//adblocker.pem`）
 
+**完整测试用例见 [TESTING.md](./TESTING.md)** —— 77 条可判定的闭环用例（A 拦截放行 / B 规则容量 / C 统计 / D 白名单元素层 / E 云端同步 / F 平台限制），每条带实测标记与验证方式。
+
 ### 6.7 改动手册（我要做 X，先动哪里）
 
 | 我要做的事 | 改哪些文件 | 同步要改的地方 | 怎么验 |
