@@ -18,9 +18,9 @@ npm run verify
 |---|---|
 | `npm run check`（静态校验） | 0 错误，1 警告（`popup.js` 引用 HTML 中不存在的 id `featureList`，但已有空值保护 —— `popup.js:127-128` 的 `if (!fl) return;`，属有意为之，「功能」分区已从 popup 移除） |
 | `node tools/test-host.mjs` | 27 通过 / 0 失败 |
-| `node tools/test-rules.mjs` | 13 通过 / 0 失败 |
-| `node tools/test-validate.mjs` | 100 通过 / 0 失败 |
-| 合计 | **140 项断言全通过** |
+| `node tools/test-rules.mjs` | 19 通过 / 0 失败（新增 `shouldSkipSubmit` 语义断言）|
+| `node tools/test-validate.mjs` | 103 通过 / 0 失败（新增 rulesets 空映射表断言）|
+| 合计 | **149 项断言全通过**（12:29 复验：test-host 27 + test-rules 19 + test-validate 103）|
 | `node --check` 全部 JS | 17 个文件全部通过（REVIEW 报告写的是 15 个，现已增至 17） |
 | 全部 JSON 解析 | 8 个文件全部通过（manifest + 5 个规则集 + 2 个 locales） |
 | `node tools/probe-cdp.mjs` | **可跑通**，实测：动态规则上限 30,000 / 会话 5,000 / 正则 1,000 / 可启用静态规则集 50 / getMatchedRules 配额 20；已启用规则集 5 个；动态规则占用 0；`getMatchedRules()` 可用；端到端自检三项全过（静态规则命中 ruleId 100 / content script 已注入 / URL 参数清理后为 `https://example.com/`）；默认订阅 4 个 |
@@ -45,7 +45,7 @@ npm run verify
 | 11 | **白名单暂停（网络层）** | **半自动** | host 判定有测试；`syncSiteAllowlist` 产出的规则形态、`pausedUntil` 过期清理、`globalPausedUntil` 到期自动恢复 —— 无覆盖 |
 | 12 | **云端数据污染的拒绝行为** | **无** | `applyCloudData` 的「全都不合法就保留本地」兜底（`auth.js:2007` 的 `wiped`）只覆盖数组字段，**`settings.rulesets` 不在其列**。**本轮实测发现真实缺陷，见 7.6** |
 | 13 | **云端同步冲突** | **无** | 冲突询问弹窗、「保留本地」分支、`CLOUD_NEWER` 跳过自动上传、拉取后 8 秒抑制回环窗口 —— 全无自动化 |
-| 14 | **账号登录注册** | **部分** | 密码策略 / 邮箱格式 / 错误翻译（纯函数）在 100 项里；**登录失败锁定计数（MAX_FAILS）、会话 30 天有效期、refresh_token 单例刷新、401 重试一次** —— 无覆盖 |
+| 14 | **账号登录注册** | **部分** | 密码策略 / 邮箱格式 / 错误翻译（纯函数）在 103 项里；**登录失败锁定计数（MAX_FAILS）、会话 30 天有效期、refresh_token 单例刷新、401 重试一次** —— 无覆盖 |
 | 15 | **元素拾取器** | **无** | `buildSelector` 选择器生成、「规则本体只由 background 写」（M6 修复）的落地 —— 无覆盖 |
 | 16 | **正式版统计降级** | **无** | 未打包模式实测过（`live: true`，明细齐全）；**打包版从未实测**，REVIEW 报告第 1018-1021 行自己也承认「仍未实测」 |
 | 17 | 打包产物 | **半自动** | `pack.ps1` 会校验 CRX 里的扩展 ID 与 `-ExpectedId` 一致，不符即中止；但 **zip 内容未与工作区逐字节比对**，且 **`pack.ps1` 本身不调用 `npm run verify`** —— 打包没有前置门禁 |
@@ -79,7 +79,7 @@ npm run verify
 |---|---|---|---|---|
 | TC-B1 | 用户规则正常生效 | 1. 设置页保存 `\|\|example.com^` 2. 访问 `https://example.com/` | `adshield_user_rules` 长度 1；`adshield_user_rules_result.result.applied === 1`；`skipped` 为空；动态规则 `100000~109999` 段有 1 条 | **自动** |
 | TC-B2 | 用户规则段位上限（M3） | 1. 保存 15000 条规则 2. 读结果 | `applied === 10000`；`skipped.length === 5000`；首条 skipped 的 `reason` 含「超出本段规则上限 10000 条」；动态规则该段恰好 10000 条且**最高 id < 110000**。**【实测】** | **自动** |
-| TC-B3 | **动态规则池接近上限时的行为** | 1. 把池子灌到 29,995 / 30,000 2. 通过设置页保存 2 条新用户规则 3. 读结果与动态规则 | **本轮实测为 FAIL**，详见 7.6 第 1 条。修复后期望：①`applied === 0` 且 `skipped` 覆盖全部未应用条目；②**原有的用户规则不得被删除**（`100000` 段条数不变）；③storage 的 `adshield_user_rules` 与 DNR 实际生效的规则集**必须一致**，不允许「界面说已保存、实际一条没生效」 | **自动** |
+| TC-B3 | **动态规则池接近上限时的行为** | 1. 把池子灌到 29,995 / 30,000 2. 通过设置页保存 2 条新用户规则 3. 读结果与动态规则 | **已修复并复验 PASS**（修复前实测为 FAIL，见 7.6 第 1 条）。实测：旧规则 5→5 保住、池总数不变、skipped 有内容。期望：①`applied === 0` 且 `skipped` 覆盖全部未应用条目；②**原有的用户规则不得被删除**（`100000` 段条数不变）；③storage 与 DNR 一致。**用 `node tools/probe-pool-full.mjs` 一键复验（退出码 0 = 通过）** | **自动** |
 | TC-B4 | 订阅更新成功 | 1. 设置页点「立即更新」 2. 读结果 | 4 个默认订阅全部 `ok`；`lastCount` 分别为 565 / 601 / 802 / 845；动态规则订阅段（300000~1299999）共 **2813** 条。**【实测】** | **自动**（依赖网络，可用本地 fixture） |
 | TC-B5 | 订阅源返回错误页 | 1. 订阅 URL 指向一个返回 HTML 的地址 2. 点更新 | `ok === false`，`error` 含「未解析出任何可用规则」；**该订阅原有的规则一条都不能少**（`background.js:812-814` 的保护：解析为 0 条时不下发） | **自动**（fixture） |
 | TC-B6 | 订阅 ID 段不越界 | 1. 订阅数加到 99 个 2. 更新 | 每个订阅占用的 ID 段互不重叠（`SUB_RULE_BASE + id%100 * 10000`）；无规则 id 落在段外 | **自动** |
@@ -115,7 +115,7 @@ npm run verify
 | TC-E2 | 连续登录失败锁定 | 1. 连续输错密码至阈值 2. 再用正确密码登录 | 达阈值后报「账号已锁定，请 N 分钟后重试」；**正确密码也不放行**；锁定期满后恢复 | **自动**（需 stub `sbRequest`） |
 | TC-E3 | 断网不被误判为登录过期 | 1. 断网 2. 点同步 | 提示「网络不可用，未同步」；**登录态保留**（不是「登录已过期」） | **自动**（需 stub fetch） |
 | TC-E4 | 上传/拉取往返一致 | 1. 本地改规则集开关 2. 上传到云端 3. 换设备拉取 | 拉取后规则集开关与上传前**逐项相同** | 手动 |
-| TC-E5 | **云端数据被污染时的拒绝行为** | 1. 直接改云端行：`settings.rulesets` 全部填非布尔值；`whitelist.disabledSites` 填非法主机名；`user_rules` 填含 `##.ad{color:red}` 的行；`subscriptions` 填 `http://` 开头的 URL 2. 在另一台设备拉取 | ① 含 `{` `}` `@` `/*` 的选择器被拒、**不进入**本地 `adshield_user_rules`；② `http://` 订阅被拒；③ 非法主机名被拒；④ 全部条目被拒的字段**保留本地原值**；⑤ 拒绝项在 console 有汇总且计数正确。**本条第 ④ 项对 `settings.rulesets` 当前为 FAIL，见 7.6 第 2 条** | **自动**（纯函数层已覆盖；应用层需补） |
+| TC-E5 | **云端数据被污染时的拒绝行为** | 1. 直接改云端行：`settings.rulesets` 全部填非布尔值；`whitelist.disabledSites` 填非法主机名；`user_rules` 填含 `##.ad{color:red}` 的行；`subscriptions` 填 `http://` 开头的 URL 2. 在另一台设备拉取 | ① 含 `{` `}` `@` `/*` 的选择器被拒、**不进入**本地 `adshield_user_rules`；② `http://` 订阅被拒；③ 非法主机名被拒；④ 全部条目被拒的字段**保留本地原值**；⑤ 拒绝项在 console 有汇总且计数正确。**本条第 ④ 项已修复并复验 PASS**（修复前 FAIL，见 7.6 第 2 条）：全非法 → 本地保留；全 false → 正常覆盖 | **自动**（纯函数层已覆盖；应用层需补） |
 | TC-E6 | 同步冲突不静默覆盖 | 1. A 设备改配置并上传 2. B 设备改配置后点上传 3. 观察 | 弹「上传会覆盖云端」确认框；**未确认则不上传**且提示「已取消，本地未上传」 | 手动 |
 | TC-E7 | 本地比云端新时不被动覆盖 | 1. 本地改动未上传 2. 拉取云端 | 弹「本地与云端冲突」框；选「保留本地」后提示「已保留本地，未做改动」，**不得**报「同步成功」 | 手动 |
 | TC-E8 | 拉取不回环覆盖云端 | 1. 拉取云端 2. 观察 8 秒内是否触发自动上传 | 拉取后 8 秒抑制窗口内**不自动上传**（`suppressAutoUpload(8000)`），避免把校验丢弃的条目反写回云端 | **自动**（需 stub fetch + 计时） |
@@ -138,7 +138,7 @@ npm run verify
 
 | # | 检查项 | 怎么验 | 判定标准 | 状态 |
 |---|---|---|---|---|
-| 1 | **静态校验与单元测试全绿** | `npm run verify` | 退出码 0；check 0 错误；140 项断言 0 失败。**check 的每条警告都要逐条看过并确认是有意为之**（当前 1 条：`popup.js` 的 `featureList`，已确认有意） | ☐ |
+| 1 | **静态校验与单元测试全绿** | `npm run verify` | 退出码 0；check 0 错误；149 项断言 0 失败。**check 的每条警告都要逐条看过并确认是有意为之**（当前 1 条：`popup.js` 的 `featureList`，已确认有意） | ☐ |
 | 2 | **规则集 ID 与锚定一致** | `node tools/check.mjs` | `rules/*.json` 的每个 ruleId 落在 `STATIC_RULE_SETS` 区间内；所有 `regexFilter` 以 `^` 开头 `$` 结尾；redirect 规则带 `redirect` 字段 | ☐ |
 | 3 | **端到端自检三项通过** | `node tools/probe-cdp.mjs` | 输出中：静态规则命中 ✓、content script 已注入 ✓、URL 参数清理生效 ✓。**三项任一为 ✗ 立即停止发布** | ☐ |
 | 4 | **动态规则占用有余量** | 同上，看「当前规则占用」 | 占用率 **< 90%**。≥90% 时新增订阅或规则会触发整批失败（probe-dnr 会直接标红） | ☐ |
@@ -149,32 +149,56 @@ npm run verify
 | 9 | **扩展 ID 与预期一致** | `.\pack.ps1 v<版本> -ExpectedId gbkfkgfigndbbbdaiffebegiiddoikin` | 脚本打印的 ID 与 `-ExpectedId` **完全相同**；ID 变了 = 换密钥 = 老用户收不到更新，**立即停止** | ☐ |
 | 10 | **manifest 版本号已更新** | 打开 `adblocker/manifest.json` 看 `version` | 与发布版本号一致（`pack.ps1` 会自动改写，但改完要**再确认一次**，别信脚本） | ☐ |
 | 11 | **核心闭环人工过一遍** | 未打包模式加载扩展，手动走：①访问带广告站点看拦截 ②暂停本站看三层同时放行 ③加一条 `\|\|example.com^` 看生效 ④拾取器点一个元素 ⑤设置页「立即更新」订阅 | 五步**全部**达到 7.2 中对应用例的预期结果。**尤其第 ④⑤ 步，自动化覆盖为 0，只能靠人** | ☐ |
-| 12 | **回滚方案已就绪** | 见下方回滚模板 | 出问题后 **10 分钟内能回到上一版**。⚠️ **本项目没有 git 仓库**（`git rev-parse` 报 `not a git repository`），**回滚不能靠 `git revert`，只能靠重新打包上一版**。因此第 8、9 项的产物（上一版的 zip + crx）**必须留档** | ☐ |
+| 12 | **回滚方案已就绪** | 见下方回滚模板 | 出问题后 **10 分钟内能回到上一版**。⚠️ **本项目是「工作区 + git 仓库」两个目录**（见下方），回滚**有两条路**：git 回退（快，但要先同步仓库→工作区）+ 重打包上一版（兜底）。**两条都要事先演练过** | ☐ |
 
-#### 回滚方案模板（本项目无 git，必须用重打包方式）
+#### 回滚方案模板
+
+> ⚠️ **本项目是「两个目录」结构**（2026-11-01 实测纠正）：
+>
+> | 目录 | 角色 |
+> |---|---|
+> | `D:\AdShield 广告拦截器\` | **工作区**，打包源（`pack.ps1` 从这里打 CRX/ZIP），代码实际编辑处 |
+> | `D:\temp-adshield-repo\` | **git 仓库**，发布用的 git 历史在这里 |
+>
+> **工作区本身不是 git 仓库**（在 `D:\AdShield 广告拦截器` 里跑 `git rev-parse` 会报
+> `not a git repository`）—— 但**这不代表没有版本控制**，仓库在另一个目录。
+> 回滚命令要 `cd D:\temp-adshield-repo` 执行。
+>
+> **同步用 `tools/sync-repo.mjs`**（工作区 → 仓库，含逐字节校验）。别手工 cp。
 
 ```
 回滚步骤：
-1. 保留上一版产物
+1. 留档（发布前就做，不是出事后再找）
    上一版 zip: adblocker-v<上一版本>.zip        ← 必须事先留档
    上一版 crx: adblocker-v<上一版本>.crx        ← 必须事先留档
-   预计时间：0 分钟（发布前就要放好，不是出事后再找）
+   上一版 commit: cd D:\temp-adshield-repo && git log --oneline -1
+   预计时间：0 分钟
 
-2. 代码回滚 = 重打包上一版源码
-   命令：.\pack.ps1 <上一版本> -ExpectedId gbkfkgfigndbbbdaiffebegiiddookin
-   预计时间：3 分钟
+2. 代码回滚 —— 路线 A：git 回退（推荐，3 分钟）
+   cd D:\temp-adshield-repo
+   git log --oneline -5                       ← 找到要回退到的 commit
+   git checkout <上一版 commit> -- adblocker/  ← 只回退扩展源码
+   然后把仓库内容同步回工作区，再重打包
+   预计时间：3 分钟（含同步 + 打包）
+   注意：只回退 adblocker/，不要动 docs/ 与 tools/
+
+3. 代码回滚 —— 路线 B：重打包上一版源码（兜底，5 分钟）
+   git checkout <上一版 commit> -- adblocker/
+   把这份 adblocker/ 覆盖回工作区
+   .\pack.ps1 <上一版本> -ExpectedId gbkfkgfigndbbbdaiffebegiiddookin
+   预计时间：5 分钟
    注意：pack.ps1 会改写 manifest.json 的 version，跑完记得改回来
 
-3. 数据回滚
+4. 数据回滚
    本扩展数据全在用户本地（chrome.storage.local），扩展本身不存用户数据，
    因此**没有数据回滚这一步**。唯一要确认的是：用户自己写的自定义规则
    不会因为换版本而丢失（存储键名未变，跨版本保留）。
 
-4. 验证
+5. 验证
    检查点：node tools/probe-cdp.mjs 三项自检全过
    预计时间：2 分钟
 
-总预计回滚时间：约 5~8 分钟
+总预计回滚时间：约 5~10 分钟（路线 A 更快）
 ```
 
 ### 7.4 本轮改动的验收标准
@@ -218,25 +242,54 @@ npm run verify
 > 排序依据：**缺陷复现概率 × 修复成本 ÷ 实现成本**。
 > 每条给出建议文件、测试点、断言方向（不写完整代码）。
 
-#### 优先级 P0 —— 覆盖本轮已发现的真实缺陷
+#### 优先级 P0 —— ~~覆盖本轮已发现的真实缺陷~~ → **已由他人落地**，转为「验证护栏」
+
+> 两条 P0 缺陷已由他人修复（12:13~12:20），我复验 PASS。
+> 原来的「补测试」需求变成「**确认防线不会被静默改掉**」——下面 ⑨ 记录了实测结果：
+> **纯 grep 式防线会漏检**，这是选实现方案时必须知道的。
 
 **① `tools/test-cloud-apply.mjs`（新建）**
-补上 `applyCloudData` 这一层的断言——它是 100 项净化测试**与**真实用户数据之间的唯一桥梁，目前完全没测。
-- 测试点：①云端 `settings.rulesets` 全为非布尔值 → **本地 rulesets 必须保留**（当前 FAIL）；②云端 `rulesets` 不是对象 → 本地保留（当前 PASS）；③云端 `disabledSites` 全非法 → 本地保留（当前 PASS，走 `wiped` 分支）；④云端 `pausedUntil` 全非法 → 本地保留；⑤云端 `subscriptions` 超 20 条 → 断言截断后的条数与 `rejected` 计数；⑥云端 `user_rules` 全含 CSS 突破 → 本地保留
+补上 `applyCloudData` 这一层的断言——它是 103 项净化测试**与**真实用户数据之间的唯一桥梁，仍无自动化。
+- 测试点：①云端 `settings.rulesets` 全为非布尔值 → **本地 rulesets 必须保留**（✅ 已由 `test-validate.mjs` 覆盖，修复后 PASS）；②云端 `rulesets` 不是对象 → 本地保留（当前 PASS）；③云端 `disabledSites` 全非法 → 本地保留（当前 PASS，走 `wiped` 分支）；④云端 `pausedUntil` 全非法 → 本地保留；⑤云端 `subscriptions` 超 20 条 → 断言截断后的条数与 `rejected` 计数；⑥云端 `user_rules` 全含 CSS 突破 → 本地保留
 - 断言方向：`applyCloudData(cloud, local, prefs)` 返回的 `s.rulesets` 应 `deepEqual` 本地原值；`keptLocal` 应包含被保护的字段名；`rejected` 各项 count 精确
 - 实现要点：把 `applyCloudData` 从 `auth.js` 的 IIFE 里抽成可注入的纯函数（参数化 `chrome.storage` 与 `getAuthState`），否则无法在 Node 里测
+- **注意**：这一层现在仍然没有自动化，**只有纯函数层（`sanitizeCloud*`）有护栏**。
+  也就是说「净化结果对了」有保证，但「净化结果被正确应用到本地」还没有。
 
-**② `tools/test-pool-full.mjs`（新建）**
+**② `tools/probe-pool-full.mjs`（已建）**
 覆盖 TC-B3：动态规则池接近上限时用户规则的存亡。这是**用户数据丢失级别**的问题。
-- 测试点：①池 29,995/30,000 时保存 2 条新规则 → **原有用户规则不得被删**（当前 FAIL）；②`skipped` 必须覆盖全部未应用条目且 reason 可读；③storage 的 `adshield_user_rules` 与 DNR 实际生效集**必须一致**；④池未满时行为不变（回归保护）
+- 测试点：①池 29,995/30,000 时保存 2 条新规则 → **原有用户规则不得被删**（✅ 已覆盖，修复后 PASS，退出码 0）；②`skipped` 必须覆盖全部未应用条目且 reason 可读；③storage 与 DNR 实际生效集**必须一致**；④池未满时行为不变（回归保护）；⑤`updateDynamicRules` 的原子语义（空 addRules = 只删不加；整批超限 = 整批拒绝）
 - 断言方向：`getDynamicRules()` 里 `100000~109999` 段的条数与 id 集合；`adshield_user_rules_result.result.applied` / `.skipped`
-- 实现要点：需要一个可控的 `chrome.declarativeNetRequest` stub（可注入现有规则数与配额），**不要**在测试里真灌 30,000 条规则
+- 实现要点：真灌 30,000 条规则代价高，**因此做成诊断工具不进 `npm run verify`**；
+  退出码即结论（0 = 防线在，1 = 回归了），适合当回归工具或发布前门禁
+
+**⑨ 防御深度的实现选型 —— 纯 grep 式防线会漏检（实测）**
+
+修复本身没有自动护栏，于是自然的想法是「加几条 grep 检查」。我做了**变异测试**
+（把防线代码删掉、只留字符串，看检查能不能发现），结论：
+
+| 防线写法 | 变异（删掉守卫逻辑、保留字符串） | 结果 |
+|---|---|---|
+| `grep "POOL_FULL"` | `background.js` 里删掉 `if (addRules.length === 0 && rules.length > 0)` 守卫，字符串留在别处 | ❌ **漏检**（grep 命中，检查通过） |
+| `grep "addRules.length === 0 && rules.length > 0"` | 同上 | ✅ 检出 |
+| `grep "Object.keys(clean).length"` | `validate.js` 里把空映射表保护改成无条件赋值 | ✅ 检出（字符串本身被删了） |
+
+**结论**：grep 能守住「**整个保护被删干净**」，守不住「**保护逻辑被改但文案还在**」。
+后者恰恰是更可能发生的回归形态（有人为了「简化代码」把守卫改写，或把错误码挪到别处）。
+
+**建议的选型**：
+- **能提到纯函数的一律用行为断言**（`test-validate.mjs` 已有 3 条，是正确范式）
+- **无法提纯函数的**（`background.js` 依赖 chrome API）→ 用**结构化检查**而不是字符串检查：
+  检查守卫条件本身（如 `addRules.length === 0`），必要时配合 `tools/probe-pool-full.mjs` 做端到端确认
+- **不要只 grep 一个错误码或文案** —— 它证明不了行为
 
 #### 优先级 P1 —— 补编排层的洞
 
 **③ 把 `test-rules.mjs` 从「逻辑复刻」改成「调用真实代码」**
-- 问题：`test-rules.mjs:13` 自己写了「逻辑改了，这份测试要跟着改」——**这不是防回归，是给回归开了个口子**。M3/M4 是本轮修的两个 Major，护栏却不是真的护栏。
-- 测试点：现有 13 项断言全部保留，改为直接调用 `background.js` 里的 `applyUserRules` / `applySubscriptionText`（同样需要抽出纯函数 + stub chrome API）
+- 问题：`test-rules.mjs` 自己在第 13 行写了「逻辑改了，这份测试要跟着改」——**这不是防回归，是给回归开了个口子**。M3/M4 是本轮修的两个 Major，护栏却不是真的护栏。
+  新增的 `shouldSkipSubmit` 断言方向正确，但它断言的仍是**复刻里的** `shouldSkipSubmit`，
+  不是 `background.js` 里那个守卫。**真实守卫被删，这 6 项断言照样绿。**
+- 测试点：现有 19 项断言全部保留，改为直接调用 `background.js` 里的 `applyUserRules` / `applySubscriptionText`（同样需要抽出纯函数 + stub chrome API）
 - 断言方向：断言值不变，只换执行主体
 
 **④ `tools/test-subs-parse.mjs`（新建）**
@@ -273,17 +326,20 @@ npm run verify
 - **性能压测**：本扩展没有服务端，不适用。
 - **i18n 相关测试**：i18n 本身还没做（LRN-20261031-004 未闭环），做了也白做。
 
-### 7.6 本轮实测发现的待决问题（**需主理人裁决，不是测试能定的**）
+### 7.6 本轮实测发现的问题 —— **四条全部已修复并复验（2026-11-01 12:30 更新）**
 
-> 以下三条都是本轮**跑出来的**，不是读码猜测。三条都需要开发侧决策。
+> 以下四条都是本轮**跑出来的**，不是读码猜测。
+>
+> **状态更新**：四条均已在 12:13~12:20 的修复轮次中落地，我用**当前工作区**重新复现验证，
+> **全部 FAIL → PASS**。修复由他人落地（赵擎同步告知），我负责验证与补护栏。
+> 原始复现数据保留在下文，作为「回归了能认出来」的基准。
 
-#### 第 1 条 · 动态规则池满时，用户已有的自定义规则会被删掉 —— P1
+#### 第 1 条 · 动态规则池满时，用户已有的自定义规则会被删掉 —— ✅ 已修复并复验
 
-**复现（实测）**：
+**原始复现（修复前，实测）**：
 1. 清空动态规则，灌到 29,995 / 30,000（上限）
 2. 通过真实 `saveUserRules` 消息保存 2 条用户规则
 
-**实测结果**：
 ```
 poolBefore: 29995  →  poolAfter: 29990
 用户规则段 100000~109999：保存前 5 条（id 100000~100004） → 保存后 0 条
@@ -291,22 +347,29 @@ applied: 0，skipped: 2，reason: "超过 Chrome 动态规则总上限 30000 条
 storage 的 adshield_user_rules: ["||n1.test^","||n2.test^"]   ← 存着，但一条都没生效
 ```
 
-**机理（读码）**：`background.js:502-503` 的预算计算 `budget = max(0, 30000 - usedByOthers - 50)`，
-其中 `usedByOthers = existing.length - removeRuleIds.length`。池满时 `budget = 0`，
-`addRules` 被截断成空；随后 `background.js:510` 仍然执行
+**机理（读码）**：`background.js` 的预算计算 `budget = max(0, 30000 - usedByOthers - 50)`，
+池满时 `budget = 0`，`addRules` 被截断成空；随后仍然执行
 `updateDynamicRules({ removeRuleIds: [旧的 5 条], addRules: [] })` —— **旧规则被删、新规则一条没进**。
+订阅路径当时有保护（截断到空时 `return` 不下发），**用户规则路径没有** —— 两条路径行为不一致。
 
-**对比**：订阅路径有保护（`background.js:828-830` 截断到空时直接 `return`，不下发），
-**用户规则路径没有**。这是两条路径的行为不一致。
+**修复（现 `background.js:509-519`）**：截断后为空时**直接 return，不下发**，并给出
+`POOL_FULL` 错误码，界面能显示「动态规则池已满，用户自定义规则未能应用（请停用部分订阅或减少规则量）」。
 
-**为什么现有测试测不出来**：`test-rules.mjs` 测的是**逻辑复刻**，复刻里没有「先删后加」这个原子语义。
+**复验结果（修复后，实测，走真实 `saveUserRules` 路径）**：
+```
+灌池前用户规则段条数 : 5  (id [100000,100001,100002,100003,100004])
+池子灌到             : 29995 / 30000
+保存 2 条新规则后    :
+  池总数             : 29995        ← 没变（修复前是 29990，被删了 5 条）
+  用户规则段条数     : 5  (id 同上)   ← 旧规则保住了（修复前是 0）
+  applied            : 0
+  skipped            : 3            ← 明确回传，不是静默
+```
+**TC-B3 由 FAIL 转 PASS。**
 
-**要裁决的**：是给用户规则路径补上与订阅路径一致的保护（截断到空就不下发），
-还是接受这个行为并在 UI 上说明？**在裁决前，TC-B3 是 FAIL。**
+#### 第 2 条 · 云端数据被污染时，`settings.rulesets` 会把本地覆盖成空 —— ✅ 已修复并复验
 
-#### 第 2 条 · 云端数据被污染时，`settings.rulesets` 会把本地覆盖成空 —— P1
-
-**复现（实测，复刻 `applyCloudData` 的覆盖逻辑）**：
+**原始复现（修复前，实测）**：
 ```
 本地 rulesets = {ads:true, tracking:false, annoyances:true, url_clean:true, malware:false}
 云端 settings = {rulesets: {ads:"notabool", tracking:"x"}}     ← 全是非布尔值
@@ -317,22 +380,50 @@ storage 的 adshield_user_rules: ["||n1.test^","||n2.test^"]   ← 存着，但�
 结果：用户手动关掉的 tracking 与 malware 被静默重开
 ```
 
-**机理（读码）**：`validate.js:231-238` 里 `rulesets` 逐项过滤后无条件
+**机理（修复前，读码）**：`validate.js` 里 `rulesets` 逐项过滤后无条件
 `res.settings.rulesets = clean`（哪怕 `clean` 是空对象），于是「有内容但全非法」变成了
-「一个合法的空值」。而 `auth.js:2007` 的 `wiped` 兜底只作用于**数组字段**
+「一个合法的空值」。而 `auth.js` 的 `wiped` 兜底只作用于**数组字段**
 （`disabledSites` / `pausedUntil` / `subscriptions` / `user_rules`），
-**`settings.rulesets` 不在其列**，`auth.js:2010` 的 `Object.assign` 无条件覆盖。
+**`settings.rulesets` 不在其列**，`Object.assign` 无条件覆盖。
 
-**对照组（实测通过）**：云端 `rulesets` 是字符串 `"ads"`（非对象）时，
+**对照组（当时实测通过）**：云端 `rulesets` 是字符串 `"ads"`（非对象）时，
 `res.settings.rulesets` 不被设置，本地**正常保留**。`disabledSites` 全非法时走 `wiped` 分支，
 本地**正常保留**。**只有「对象且全非法」这一种形态会漏。**
 
 **与文档的出入**：`docs/ARCHITECTURE.md` §五写的是「云端某个字段有内容但校验后一个都不剩时，保留本地原值。否则一条全非法的行就能把用户的白名单清空。」——`rulesets` 恰好落在这个承诺之外。
 
-**要裁决的**：是把 `rulesets` 纳入 `wiped` 保护（并让 `sanitizeCloudSettings` 在全非法时
-返回 `undefined` 而非 `{}`），还是接受？**在裁决前，TC-E5 的第 ④ 项对 `settings.rulesets` 是 FAIL。**
+**修复（现 `validate.js:237-242`）**：空映射表不再被接受。
 
-#### 第 3 条 · 正式安装版的统计差异，本轮仍未实测 —— P1（不是缺陷，是证据缺口）
+```js
+if (Object.keys(clean).length) res.settings.rulesets = clean;
+else res.rejected++;
+```
+
+**复验结果（修复后，实测，四种形态）**：
+| 云端 rulesets | 复验结果 |
+|---|---|
+| `{ads:"notabool",tracking:"x"}` 对象全非法（缺陷原始形态） | ✅ 本地保留，`rejected=3` |
+| `"ads"` 字符串（非对象） | ✅ 本地保留，`rejected=1` |
+| `{ads:true,tracking:false}` 部分合法 | ✅ 正常覆盖 |
+| `{ads:false,...}` 全 false（用户主动全关） | ✅ **正常覆盖**（这是必须保留的能力） |
+| `{}` 空对象 | ✅ 本地保留，`rejected=1` |
+
+**端到端复验（真实浏览器，走 `applyCloudData` 的覆盖逻辑）**：
+```
+S1 本地基线 rulesets : {ads:true, tracking:false, annoyances:true, url_clean:true, malware:false}
+S2 喂污染云端行后     : {ads:true, tracking:false, annoyances:true, url_clean:true, malware:false}  ← 未被覆盖
+   sanitizeCloudSettings("rulesets" in settings) = false  → 本地保留
+   settingsRejected = 3
+   disabledSites 走 wiped 分支 → keptLocal = ["disabledSites"]  ← 白名单也保住了
+S3 getState 合并后    : {ads:true, tracking:false, annoyances:true, url_clean:true, malware:false}  ← 仍是用户设的值
+```
+**TC-E5 由 FAIL 转 PASS。**
+
+**注意一个容易改坏的边界**：修复用的是 `Object.keys(clean).length`（**键数**），
+而不是「值是否全 false」。必须保持这样 —— 否则「用户主动把 5 个规则集全关掉」
+这种合法操作会被误判成脏数据而保留本地旧值。**这条边界已实测确认。**
+
+#### 第 3 条 · 正式安装版的统计差异，本轮仍未实测 —— ⏳ P1 证据缺口（**唯一未闭环的一条**）
 
 **事实（已核实）**：
 - Chrome 官方权限表原文：`declarativeNetRequestFeedback` —— *"This permission is for use with
@@ -340,7 +431,7 @@ storage 的 adshield_user_rules: ["||n1.test^","||n2.test^"]   ← 存着，但�
 - 未打包模式**实测**：反馈 API 完全可用，`live:true`，明细齐全
 - 官方文档对 `onRuleMatchedDebug` 的表述是 *"Only available for unpacked extensions with the
   declarativeNetRequestFeedback permission"* —— **关键词是 unpacked，不是「商店安装」**
-- REVIEW 报告第 1018-1021 行自己把「正式安装版（打包 CRX）的反馈 API 差异」列为**仍未实测**
+- REVIEW 报告自己把「正式安装版（打包 CRX）的反馈 API 差异」列为**仍未实测**
 - 本轮所有实测均在**未打包模式**下完成（`Extensions.loadUnpacked`）
 
 **未解的问题**：本扩展的发布形态是**自签名 CRX**（用户手动安装，不走商店）。
@@ -350,44 +441,71 @@ storage 的 adshield_user_rules: ["||n1.test^","||n2.test^"]   ← 存着，但�
 那么**整个 M1 修复的方案前提就有问题**（UI 会一直告诉正式版用户「你看不到明细」，
 而他们其实看得到；反过来如果成立，则当前实现是对的）。
 
-**要裁决的**：发布前必须装一次 CRX 实测一次，把结论写进 `AGENTS.md` §7。
+**要做的**：发布前装一次 CRX 实测一次，把结论写进 `AGENTS.md` §7。
 **在实测之前，「正式版无明细」这条只能算「基于官方文档的推断」，不能算已验证事实。**
+**我无法在无头环境完成这一步**（装不了带签名的 CRX），需要真机 + 一次 CRX 安装。
 
-#### 第 4 条 · `adshield_user_cosmetic` 有第二个写入者（轻微，约定偏离）—— P2
+#### 第 4 条 · `adshield_user_cosmetic` 有第二个写入者 —— ✅ 已修复
 
-**事实（读码）**：`AGENTS.md` §0「六条硬性约定」下的第 1 条「Storage 键的单一写入者」表声明
+**原始事实（修复前，读码）**：`AGENTS.md` §0「六条硬性约定」下的第 1 条「Storage 键的单一写入者」表声明
 `adshield_user_cosmetic` 的唯一权威写入者是 `background.js` 的 `applyUserRules`。
-但 `options.js:1043` 也直接写了这个键：
+但 `options.js` 的删除按钮当时也直接写了这个键：
 
 ```js
-// options.js:1040-1045（删除一条元素隐藏规则）
+// options.js（修复前）
 const arr = cur.adshield_user_cosmetic || [];
 arr.splice(idx, 1);
 await chrome.storage.local.set({ "adshield_user_cosmetic": arr });   // ← 第二个写入者
-// 随后才发 saveUserRules，background 会用自己的推导结果整体覆盖这个键
 ```
 
-**为什么目前没出事（读码）**：紧接着的 `saveUserRules` 会让 `applyUserRules` 从
+**为什么当时没出事（读码）**：紧接着的 `saveUserRules` 会让 `applyUserRules` 从
 `adshield_user_rules` 重新推导 `cosmetic` 并整体覆盖该键。由于删除时也同步从
-`adshield_user_rules` 里摘掉了对应行（`options.js:1045-1056`），最终状态是收敛的、正确的。
-**属于约定偏离，不是功能缺陷。**
+`adshield_user_rules` 里摘掉了对应行，最终状态是收敛的、正确的。**属于约定偏离，不是功能缺陷。**
 
 **但它有两个真实代价**：
-① 多一次无谓的 storage 写 + 一次 `storage.onChanged` 事件 → `cosmetic.js:416` 的
+① 多一次无谓的 storage 写 + 一次 `storage.onChanged` 事件 → `cosmetic.js` 的
 监听器会因此多跑一轮 `reloadUserRules`，在删除瞬间可能短暂渲染出与最终态不一致的选择器集合；
 ② 下一个人若照 `AGENTS.md` 的表去理解这个键，会以为只有 background 写它，
 从而写出第三处写入 —— 这正是 M6（拾取器重复写）当初的成因模式。
 
-**要裁决的**：是把 `options.js` 这处直接写改成只发消息（与 `adshield_user_rules` 一致），
-还是把 `AGENTS.md` 的表改成「background 写、options 可增量改写」并说明收敛条件？
-**不影响功能，但属于「消除协作隐患」范畴 —— 与 REVIEW 第七节「冲突模式 1」同类。**
+**修复（现 `options.js` 删除按钮）**：改为**只发 `saveUserRules` 消息**，不再自己写这个键，
+并留了注释说明为什么不能自己写：
+```js
+// 规则本体交给 background 写：这边再 set 一次会和应用流程抢同一个键。
+// adshield_user_cosmetic 同理 —— 它的权威写入者是 background 的 applyUserRules，
+// 它会根据 adshield_user_rules 里剩下的 ## 规则重算并覆盖。
+// 这页面自己写一次会造成两个写入者竞争：删掉的规则可能被 background 的重算带回来。
+await chrome.runtime.sendMessage({ type: "saveUserRules", rules: userRules });
+```
+**`AGENTS.md` 的单一写入者表因此保持准确，不用改。**
 
-### 7.7 交接给下一个人的一句话
+**另有一道自动化护栏**：`tools/check.mjs` 第 4c 节「storage 键的单一写入者」现在会
+扫描全部 JS 文件，发现任何**非 background** 的文件直接 `storage.local.set({ "<key>" ... })`
+就报错。这条护栏同时覆盖 `adshield_settings` / `adshield_user_rules` /
+`adshield_user_cosmetic` / `adshield_stats` 四个键 —— 下一个人再写第三处写入会被直接拦住。
+
+### 7.7 补的护栏与工具（本轮新增）
+
+| 产物 | 类型 | 作用 | 怎么用 |
+|---|---|---|---|
+| `tools/probe-pool-full.mjs` | **可复用诊断工具** | 池满时旧用户规则是否保住；`updateDynamicRules` 的真实原子语义；整批超限是否原子拒绝 | `node tools/probe-pool-full.mjs`，**退出码 0 = 防线在，1 = 回归了**。不进 `npm run verify`（要真把池子灌到 29,995 条，代价高） |
+| `tools/check.mjs` 第 4c 节 | 静态检查 | storage 键的单一写入者（4 个键） | 已在 `npm run check` 里，自动生效 |
+| `tools/check.mjs` 第 4d 节 | 静态检查 | 共享模块的解构完整性（「用到但没解构」→ ReferenceError，语法检查查不出来） | 已在 `npm run check` 里，自动生效 |
+| `tools/test-validate.mjs` | 单元测试 | rulesets 空映射表 / 全非法不被接受（新增 3 项，共 103 项） | 已在 `npm test` 里 |
+| `tools/test-rules.mjs` | 单元测试 | `shouldSkipSubmit` 语义：池满时必须标记为不下发（新增 6 项，共 19 项） | 已在 `npm test` 里 |
+
+> ⚠️ **`test-rules.mjs` 仍是逻辑复刻**，不是调用真实代码。
+> 新增的 `shouldSkipSubmit` 断言与真实守卫条件一致，但复刻与实现仍是两份。
+> 这是 7.5 P1 第 ③ 条建议的后续项 —— 把复刻换成真实调用。
+
+### 7.8 交接给下一个人的一句话
 
 > 交接给下一个人：
-> **自动化的洞在编排层，不在纯函数层。** 140 项断言守住了「输入进来是否干净」，
-> 但没守住「干净的数据落下去之后对不对」。
+> **自动化的洞在编排层，不在纯函数层。** 现在的断言守住了「输入进来是否干净」
+> 和「防线还在不在」，但**还没守住「防线被改掉时能认出来」**——
+> `test-rules.mjs` 仍是复刻，改了真实代码它不会红。
 > 动手改 `background.js` 的任何一条编排逻辑（订阅更新 / 统计分类 / 云端应用）之前，
-> **先看 7.6 的三条实测结论** —— 它们分别对应「用户规则被删」「规则集被静默重置」
-> 「正式版结论未验证」，都是现有测试**结构上测不到**的地方。
-> 补测试的优先级见 7.5，P0 两条直接对应已发现的缺陷。
+> **先跑 `node tools/probe-pool-full.mjs`**（退出码即结论），
+> 再看 **7.5 P1 第 ③ 条**（复刻改真实调用）。
+> 7.6 里四条已闭环，**只剩第 3 条（正式安装版统计）仍是未验证的推断**，
+> 发布前必须装一次 CRX 实测。
