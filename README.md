@@ -2,7 +2,7 @@
 
 一个跑在 Manifest V3 上的广告与追踪拦截扩展，Chrome 和 Edge 都能用。
 
-[![Version](https://img.shields.io/badge/version-2.9.93-blue)]()
+[![Version](https://img.shields.io/badge/version-2.9.96-blue)]()
 [![Manifest](https://img.shields.io/badge/Manifest-V3-green)]()
 [![License](https://img.shields.io/badge/license-MIT-orange)]()
 
@@ -29,9 +29,9 @@ EasyPrivacy 四个源，打开规则页会检查更新，也能设成每 6、12�
 Edge 商店有上架，但版本停在 v2.0.0，比 GitHub 落后不少：
 [Edge 商店](https://microsoftedge.microsoft.com/addons/detail/ogjodahjklhodkmnjhopkopflngicokg)
 
-想用最新版（v2.9.93），从 Release 下载 zip 走开发者模式：
+想用最新版（v2.9.96），从 Release 下载 zip 走开发者模式：
 
-1. 下载 Release 里的 `adblocker-v2.9.93.zip` 并解压
+1. 下载 Release 里的 `adblocker-v2.9.96.zip` 并解压
 2. 打开 `chrome://extensions/`，Edge 用 `edge://extensions/`
 3. 右上角开启开发者模式
 4. 点「加载已解压的扩展程序」，选中解压出来的文件夹
@@ -155,8 +155,9 @@ adblocker/
 
 **统计数字一直是 0？**
 
-统计依赖 `declarativeNetRequestFeedback`，这个 API 只在开发者模式加载扩展时才有值。
-从 crx 或商店装的版本拿不到数据，界面上会显示降级提示。
+分两种安装方式。开发者模式加载的版本能拿到逐条请求明细，所以 URL、Top 域名榜、趋势图都有；
+正式安装（crx 或商店）改用 `getMatchedRules()` 定时轮询，累计拦截数和分类占比照常增长，
+但这个 API 不返回 URL，所以「拦截的域名」和趋势图会是空的，设置页与弹窗里有对应说明。
 
 **为什么拦截数这么高，某个网站一次就 60 条？**
 

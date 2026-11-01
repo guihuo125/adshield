@@ -10,7 +10,7 @@
 
 - Chrome Manifest V3 扩展，广告拦截 + 元素隐藏 + URL 参数清理 + 反拦截检测 + 账号云同步。
 - 独立开发者的单人项目，没有 CI、没有 review、没有测试框架。
-- 当前版本 **2.9.95**（`adblocker/manifest.json`）。
+- 当前版本 **2.9.96**（`adblocker/manifest.json`）。
 - 两个目录，**必须分清**（见 §8）：
 
 | 目录 | 角色 |
@@ -202,7 +202,7 @@ chrome.declarativeNetRequest.GETMATCHEDRULES_QUOTA_INTERVAL           // 10（�
 
 - 本机执行策略是 **Restricted**（所有作用域 Undefined）。跑 `.ps1` 要用单次进程级绕过：
   ```
-  powershell -NoProfile -ExecutionPolicy Bypass -File "D:\AdShield 广告拦截器\pack.ps1" 2.9.95 -ExpectedId gbkfkgfigndbbbdaiffebegiiddoikin
+  powershell -NoProfile -ExecutionPolicy Bypass -File "D:\AdShield 广告拦截器\pack.ps1" 2.9.96 -ExpectedId gbkfkgfigndbbbdaiffebegiiddoikin
   ```
   不改系统设置。**不要**用 `Set-ExecutionPolicy` 持久改。
 - PowerShell 5.1 读 UTF-8 无 BOM 文件会按 ANSI 解码 → 中文变乱码。脚本文件（尤其 `.ps1`）里的注释**只写 ASCII**。其它文件（`.json`/`.md`/`.gitignore`）用 UTF-8 无 BOM 写。
@@ -243,6 +243,7 @@ pack.ps1 <版本号> [-ExpectedId <扩展ID>]
 | 12 | DNR 动态规则是**共享池子** | 订阅、用户自定义、站点放行共用一个上限，不是各自独立 |
 | 13 | MV3 的 SW 会**频繁挂起** | 跨重启要保留的状态（水位线之类）必须存 storage，不能用模块级变量 |
 | 14 | 仓库目录 `D:\temp-adshield-repo` 和工作区要**手工同步** | 改完忘了同步 = 发出去的包和 git 历史不一致。打包前先跑一次全量哈希比对 |
+| 15 | 打包时把 `_metadata` 移到**源码目录之外** | 旧脚本把它改名成 `_metadata.bak-<时间戳>` 留在 `adblocker/` 里，Chrome 打包时连带收进 CRX：2.9.95 的 crx 有 46 个条目（15 个是垃圾），zip 却只有干净的 31 个。发布前必须分别验 zip 和 crx 载荷 |
 
 ---
 
@@ -283,7 +284,7 @@ Get-ChildItem D:\AdShield 广告拦截器\adblocker\src -Recurse -Filter *.js |
 
 ```bash
 cd /tmp && rm -rf zx && mkdir zx && cd zx
-unzip -q "D:/AdShield 广告拦截器/adblocker-v2.9.95.zip"
+unzip -q "D:/AdShield 广告拦截器/adblocker-v2.9.96.zip"
 find . -type f | sed 's|^\./||' | while read f; do
   a=$(md5sum "$f" | cut -d' ' -f1)
   b=$(md5sum "D:/AdShield 广告拦截器/adblocker/$f" | cut -d' ' -f1)
@@ -291,7 +292,19 @@ find . -type f | sed 's|^\./||' | while read f; do
 done
 ```
 
-2026-11-01 结果：包内 31 个文件与工作区**逐字节一致**。
+CRX 也要单独验，**它的载荷不是从文件尾读长度得到的**：CRX3 布局是
+`"Cr24"(4) + version(4) + headerLength(4) + header + zip`，zip 从第 `12 + headerLength` 字节开始一直到文件尾，
+中间**没有** zip 长度字段（把 `headerLength` 后面 4 字节当长度读会得出几十 MB 的假数值）。
+
+```bash
+node -e "const fs=require('fs'),os=require('os'),p=require('path');
+const b=fs.readFileSync('D:/AdShield 广告拦截器/adblocker-v2.9.96.crx');
+const hl=b.readUInt32LE(8);
+fs.writeFileSync(p.join(os.tmpdir(),'crx-payload.zip'), b.slice(12+hl));"
+```
+
+2026-11-01 实测（2.9.96）：ZIP 与 CRX 载荷都是 **31 个文件、与工作区逐字节一致、无 `_metadata` 残留**，
+CRX 内嵌扩展 ID `gbkfkgfigndbbbdaiffebegiiddoikin` 与签名私钥一致。
 
 ### 6.4 两个目录全量比对（可复现）
 
@@ -405,6 +418,7 @@ cd D:/temp-adshield-repo && git add adblocker/src/shared/auth.js && git commit
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| **2.9.96** | 2026-11-01 | **已发布为 GitHub Release**，一次覆盖 2.9.94 与 2.9.95 的内容：云同步不再吃掉含 `>` 的元素隐藏规则、订阅源解析失败不再清空旧规则、自动更新闹钟不再被重置、URL 清理不再计入拦截总数、账号过期与断网分开处理、请求全部带超时、设置页此前没接线的按钮和下拉补齐、弹窗改为独立分层；打包脚本修掉 CRX 混入 `_metadata` 备份的问题 |
 | 2.9.95 | 2026-11-01 | 遗留批量修复：设备删除越权、服务端错误正文注入、云端/备份 CSS 注入面、订阅 ID 去重、规则上限改用实测常量、正式版统计接 `getMatchedRules`、`docs/supabase-rls.sql` 入仓 |
 | 2.9.94 | 2026-11-01 | 全局暂停真正停用动态规则；浏览助手文案误判（选择器收窄 + 500 字上限）；设置页补统计可用性说明；`pack.ps1` 的示例扩展 ID 修正 |
 | 2.9.93 | 2026-10-31 | 第三轮审查修复（反拦截 MAIN world、URL 清理正则锚定、云端校验器） |
@@ -415,9 +429,9 @@ git 仓库提交：
 - `6b1982a` 第三轮审查修复
 - `de1a68f` 本交接文档 + `tools/verify-extension.js`
 - `02b0f92` 把只在工作区的 auth.js 四处修复补进 git 历史
-- 本次：文档校正（行数、§6.3–6.5 验证方法、§7.1/7.2 完成）+ 私钥移出项目目录
+- 本次：文档校正（行数、§6.3–6.5 验证方法、§7.1/7.2 完成）+ 私钥移出项目目录 + 2.9.96 发布
 
-**以上都没 push**（§8 第 10 条）。
+以上都已 push 到 `origin/main`（2026-11-01 推完，远端最新 `v2.9.96` 标签 + Release）。
 
 ---
 

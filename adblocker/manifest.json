@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "minimum_chrome_version": "114",
   "name": "__MSG_extensionName__",
-  "version": "2.9.95",
+  "version": "2.9.96",
   "description": "__MSG_extensionDescription__",
   "default_locale": "zh_CN",
   "permissions": [
