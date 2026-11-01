@@ -18,7 +18,7 @@
 | `D:\AdShield 广告拦截器\` | 工作区。**打包源**（`pack.ps1` 从这里打 CRX/ZIP），代码实际编辑处 |
 | `D:\temp-adshield-repo\` | git 仓库。README / PRIVACY / docs / 发布用的 git 历史在这里 |
 
-两边内容必须保持一致。目前**仓库里少一个文件**（`adblocker/src/shared/auth.js`，见 §7.1）。
+两边内容必须保持一致。2026-11-01 全量哈希比对后已一致（31/31 逐字节相同），比对方法见 §6.4。
 
 ---
 
@@ -36,18 +36,18 @@ adblocker/
   _locales/{zh_CN,en}/messages.json   只有 extensionName / extensionDescription 两个键
   icons/                   icon16/32/48/128
   src/
-    background.js          1618 行。Service Worker：规则同步、订阅拉取、统计、消息处理
-    popup.{html,css,js}   572 行 js。工具栏弹窗
-    options.{html,css,js} 1746 行 js + 48KB html。设置页（6 个页签）
-    logger.{html,css,js}  133 行。请求级明细日志
+    background.js          1864 行。Service Worker：规则同步、订阅拉取、统计、消息处理
+    popup.{html,css,js}   662 行 js。工具栏弹窗
+    options.{html,css,js} 1981 行 js + 48KB html。设置页（6 个页签）
+    logger.{html,css,js}  146 行。请求级明细日志
     content/
-      cosmetic.js          388 行。元素隐藏引擎 + 浏览助手（反拦截检测）
-      anti-detect.js       85 行。隔离世界部分：DOM 诱饵 + 与 MAIN world 握手
-      anti-detect-main.js  81 行。**MAIN world**：全局变量伪装 + 真实检测
-      picker.js            279 行。元素拾取器（自带一套模态框样式）
+      cosmetic.js          439 行。元素隐藏引擎 + 浏览助手（反拦截检测）
+      anti-detect.js       97 行。隔离世界部分：DOM 诱饵 + 与 MAIN world 握手
+      anti-detect-main.js  97 行。**MAIN world**：全局变量伪装 + 真实检测
+      picker.js            301 行。元素拾取器（自带一套模态框样式）
     shared/
-      auth.js              2589 行。账号系统 + Supabase 云同步（**最大的单文件**）
-      modal.js             120 行。自定义 showConfirm / showAlert
+      auth.js              2782 行。账号系统 + Supabase 云同步（**最大的单文件**）
+      modal.js             143 行。自定义 showConfirm / showAlert
       theme.js / nav-init.js
 ```
 
@@ -171,7 +171,7 @@ await browser.send("Target.createTarget", { url: "chrome-extension://" + id + "/
 - 求值一律放在**扩展页**里做，不要在 Service Worker 目标里求值 —— SW 会休眠，`Runtime.evaluate` 会一直挂着不返回。
 - 判定「请求被拦没被拦」用 **CDP Network 事件**（`Network.loadingFailed` 的 `errorText` 含 `BLOCKED`；`Network.responseReceived` 200），**不要读 DOM** —— Chrome 的错误页 body 取 `innerText` 常拿到空串。
 - 扩展 ID = 公钥 SPKI DER 的 SHA-256 前 16 字节，十六进制位映射到 `a-p`。
-  - CRX 身份（由 `.keys/adblocker.pem` 决定）：`gbkfkgfigndbbbdaiffebegiiddoikin`
+  - CRX 身份（由签名私钥决定，私钥现在在 `D:\AdShield-Keys\adblocker.pem`，见 §7.2）：`gbkfkgfigndbbbdaiffebegiiddoikin`
   - 未打包加载（按目录路径算）：`enkhcjphkpfbdmkdamjcipommamllbmg`
   - 这两个不是同一个扩展，别混。
 
@@ -279,33 +279,84 @@ Get-ChildItem D:\AdShield 广告拦截器\adblocker\src -Recurse -Filter *.js |
 
 脚本思路：读 zip 的 entry 流 → SHA256 → 和源文件 SHA256 比。**这一步不能省**，见坑 #9。
 
+实测过的一条（注意 zip 是扁平到扩展根的，比对基准要带上 `adblocker/`）：
+
+```bash
+cd /tmp && rm -rf zx && mkdir zx && cd zx
+unzip -q "D:/AdShield 广告拦截器/adblocker-v2.9.95.zip"
+find . -type f | sed 's|^\./||' | while read f; do
+  a=$(md5sum "$f" | cut -d' ' -f1)
+  b=$(md5sum "D:/AdShield 广告拦截器/adblocker/$f" | cut -d' ' -f1)
+  [ "$a" = "$b" ] || echo "DIFF $f"
+done
+```
+
+2026-11-01 结果：包内 31 个文件与工作区**逐字节一致**。
+
+### 6.4 两个目录全量比对（可复现）
+
+```bash
+cd "D:/AdShield 广告拦截器/adblocker"
+find . -type f \( -name "*.js" -o -name "*.json" -o -name "*.css" -o -name "*.html" -o -name "*.png" \) | sed 's|^\./||' | while read f; do
+  a=$(md5sum "$f" | cut -d' ' -f1)
+  b=$(md5sum "D:/temp-adshield-repo/adblocker/$f" 2>/dev/null | cut -d' ' -f1)
+  [ "$a" = "$b" ] || echo "DIFF $f"
+done
+```
+
+2026-11-01 结果：31/31 一致（本轮之前 auth.js 差一份，已补）。
+
+### 6.5 第三轮修复的真机验证（22 项全过）
+
+除了 `tools/verify-extension.js` 的那 6 项，另有一轮同思路的 CDP 验证已入库，可直接跑：
+
+```
+node D:\temp-adshield-repo\tools\verify-round3-fixes.js
+```
+
+（离屏临时 profile + `Extensions.loadUnpacked`，不碰用户正在用的 Chrome；2026-11-01 实测 22 项全过）覆盖本轮改动的行为：
+
+- 订阅更新间隔选 6 / 选「关闭」都落盘，重开设置页回显正确（**0 不再被当成 24**）
+- 含 `>` 的自定义规则保存后 `applied=1 / cosmetic=1`，选择器原样保留，动态规则确实装上，状态栏显示结果而不是空白
+- 备份 JSON / 元素隐藏 TXT / 统计 JSON 三个导出按钮都真的触发下载并给出提示文案
+- 同时打开两个确认框是两层独立 DOM，关掉上层不会改写下层，关完不残留
+- **阳性对照**：真实拦截让 `total +1`；参数清理让 `url_clean` 分类 +1 而 `total` 不变（先证明计数通道有效，再证明清理不计数）
+- 取消勾选「白名单」后 `readSyncPrefs()` 返回 `whitelist:false`，其余三项默认 true
+
+两个坑：
+
+- Chrome 156 不把 blob 下载写进 `Browser.setDownloadBehavior` 指定的目录，**断言要放在 `Browser.downloadWillBegin` 事件 + 页面文案上**，查磁盘会假失败。
+- `setDownloadBehavior` 必须设在**浏览器会话**上；设在页面会话上会被静默忽略。
+
 ---
 
 ## 7. 未完成 / 待办
 
-### 7.1 立刻要做的（一条命令）
+### 7.1 ✅ 已完成（2026-11-01，commit `02b0f92`）
 
-`adblocker/src/shared/auth.js` 的四处修复（设备删除越权 / 服务端错误注入 / 云端 CSS 注入面 / 订阅 ID 去重）**在工作区里是对的，但没进 git 仓库**（写仓库目录被沙箱策略拦了）。2.9.95 的包里是含修复的，只有 git 历史差这一个文件：
+`adblocker/src/shared/auth.js` 的四处修复（设备删除越权 / 服务端错误注入 / 云端 CSS 注入面 / 订阅 ID 去重）已同步进 git 仓库，两个目录现在逐字节一致（见 §6.4）。
 
-```powershell
-Copy-Item 'D:\AdShield 广告拦截器\adblocker\src\shared\auth.js' 'D:\temp-adshield-repo\adblocker\src\shared\auth.js' -Force
-cd D:\temp-adshield-repo
-git add adblocker/src/shared/auth.js
-git commit -m "fix(auth): 设备删除越权/服务端错误注入/云端CSS注入面/订阅ID去重"
+当时同步的做法：
+
+```bash
+cp "D:/AdShield 广告拦截器/adblocker/src/shared/auth.js" "D:/temp-adshield-repo/adblocker/src/shared/auth.js"
+cd D:/temp-adshield-repo && git add adblocker/src/shared/auth.js && git commit
 ```
 
-### 7.2 签名私钥外移（一条命令 + 一个环境变量）
+**没有 push**，按 §8 第 10 条等确认。
 
-私钥现在在 `D:\AdShield 广告拦截器\.keys\adblocker.pem`，**和源码同目录**。整个文件夹被打包发人 = 扩展身份送人（拿到私钥就能签出同一个扩展 ID 的更新）。
+### 7.2 ✅ 已完成（2026-11-01）：签名私钥已移出项目目录
 
-```powershell
-New-Item -ItemType Directory D:\AdShield-Keys -Force
-Move-Item 'D:\AdShield 广告拦截器\.keys\adblocker.pem' 'D:\AdShield-Keys\adblocker.pem'
-```
+私钥现在只在 `D:\AdShield-Keys\adblocker.pem`，项目内的 `.keys\adblocker.pem` 已删除（`.keys` 里只剩公钥 `derived-public.pem` 和一个 ACL 备份，都可以外发）。
 
-`pack.ps1` 已经改成按这个顺序找私钥：`$env:ADSHIELD_KEY` → `D:\AdShield-Keys\adblocker.pem` → 项目内 `.keys\`。移动后不用改脚本。要设环境变量就 `$env:ADSHIELD_KEY = 'D:\AdShield-Keys\adblocker.pem'`。
+- 删除前先做了 SHA256 比对，两边一致：`4AE4746E…4237AA95` —— 同一把钥匙，**扩展 ID 不变**，已装用户照常收更新。
+- 权限照搬原来的收紧状态：`SYSTEM:(F)`、`Administrators:(F)`、`YUNGUI-PC\39007:(R)`，无继承。
+- `pack.ps1` 的查找顺序是 `$env:ADSHIELD_KEY` → `D:\AdShield-Keys\adblocker.pem` → 项目内 `.keys\`，所以不用改脚本，也不会再打「私钥仍在项目目录」的 warning。
 
-**注意：私钥丢了 = 扩展 ID 变化 = 已装用户收不到更新。** 备份好。
+踩到的两个坑：
+
+- `.ps1` 里**不要写中文路径字面量**（PS 5.1 按 ANSI 解码 UTF-8 无 BOM 会乱码），用 `$PSScriptRoot` 派生。
+- 收紧过的文件用 `Remove-Item -Force` 会报「访问被拒绝」；先 `icacls <file> /grant "<user>:(D)"`，再用 `[System.IO.File]::Delete()` 才能删掉。
 
 ### 7.3 i18n（最大的未开工项）
 
@@ -362,6 +413,11 @@ git 仓库提交：
 - `73e95eb` 遗留批量修复
 - `de3bf72` 全局暂停 + 文案误判 + 统计说明
 - `6b1982a` 第三轮审查修复
+- `de1a68f` 本交接文档 + `tools/verify-extension.js`
+- `02b0f92` 把只在工作区的 auth.js 四处修复补进 git 历史
+- 本次：文档校正（行数、§6.3–6.5 验证方法、§7.1/7.2 完成）+ 私钥移出项目目录
+
+**以上都没 push**（§8 第 10 条）。
 
 ---
 
