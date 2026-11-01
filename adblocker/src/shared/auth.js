@@ -1302,8 +1302,11 @@
   }
 
   // 移除设备（走 401→刷新→重试一次的路径）
-  async function removeDevice(token, deviceId) {
-    const url = SUPABASE_URL + "/rest/v1/adshield_devices?device_id=eq." + encodeURIComponent(deviceId);
+  async function removeDevice(token, userId, deviceId) {
+    // 必须同时按 user_id 过滤：只按 device_id 删的话，任何登录用户都能删掉别人账号的设备记录。
+    // 真正的授权边界在服务端 RLS，这个过滤是客户端这一侧的兜底，不是替代品。
+    const url = SUPABASE_URL + "/rest/v1/adshield_devices?user_id=eq." + encodeURIComponent(userId) +
+      "&device_id=eq." + encodeURIComponent(deviceId);
     const resp = await withAuthRetry((tk) => fetch(url, {
       method: "DELETE",
       headers: {
@@ -1380,7 +1383,7 @@
             });
             if (!ok) return;
             try {
-              await removeDevice(state.token, d.device_id);
+              await removeDevice(state.token, state.userId, d.device_id);
               await renderDevices();
             } catch (e) {
               await showAlert("移除失败：" + (e.message || e), { title: "错误", type: "danger" });
@@ -1455,17 +1458,35 @@
     ];
     const toSave = {};
     let count = 0;
+    let skipped = 0;
     for (const [k, v] of Object.entries(payload.data)) {
-      if (allowed.includes(k)) {
-        toSave[k] = v;
+      if (!allowed.includes(k)) { skipped++; continue; }
+      if (k === "adshield_user_rules" || k === "adshield_user_cosmetic") {
+        // 备份文件是外部输入，不能照单全收：
+        // adshield_user_cosmetic 会被 cosmetic.js 直接消费（连 background 的 ## 过滤都不经过），
+        // 一条含 { } 的规则就能往每个网站注入任意 CSS。
+        if (!Array.isArray(v)) { skipped++; continue; }
+        const clean = [];
+        for (const r of v) {
+          if (typeof r !== "string" || r.length > 1000 || RULE_CTRL_CHARS.test(r)) { skipped++; continue; }
+          if (!isSafeUserRule(r)) { skipped++; continue; }
+          clean.push(r);
+        }
+        toSave[k] = clean;
         count++;
+        continue;
       }
+      if (k === "adshield_settings") {
+        if (!v || typeof v !== "object" || Array.isArray(v)) { skipped++; continue; }
+      }
+      toSave[k] = v;
+      count++;
     }
     if (count === 0) {
       throw new Error("文件中没有可导入的数据");
     }
     await chrome.storage.local.set(toSave);
-    return { count, meta };
+    return { count, meta, skipped };
   }
 
   // ===== 忘记密码弹窗 =====
@@ -2134,13 +2155,40 @@
   // 而这里拒掉的条目会被写回本地、再触发自动上传推回云端，等于把用户的规则永久删掉。
   const RULE_CTRL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/;
 
-  // user_rules：数组；每项 string；≤1000 字符；总条数 ≤5000
+  // 元素隐藏规则（## / #@#）的选择器会被原样拼进 CSS —— cosmetic.js 里是 sel + "{display:none !important;}"。
+  // 含 { } @ /* 的选择器能提前闭合规则块、塞进新声明、或把后面的内容注释掉，
+  // 等于往用户访问的每个网站注入任意 CSS（可伪造界面、可外传页面数据）。
+  // < > 不拦：".ad > .banner" 是合法选择器，拦了会误伤用户自己的正常规则。
+  const CSS_BREAKOUT = /[{}@]|\/\*|\*\//;
+  const MAX_CSS_SELECTOR_LEN = 500;
+
+  function isSafeCssSelector(sel) {
+    if (typeof sel !== "string") return false;
+    const s = sel.trim();
+    if (!s || s.length > MAX_CSS_SELECTOR_LEN) return false;
+    return !CSS_BREAKOUT.test(s);
+  }
+
+  // 带元素隐藏部分的用户规则要额外检查选择器；纯网络规则交给 background 的解析器，不在这里管
+  function isSafeUserRule(rule) {
+    if (typeof rule !== "string") return false;
+    const hideIdx = rule.indexOf("##");
+    const excIdx = rule.indexOf("#@#");
+    if (hideIdx < 0 && excIdx < 0) return true;
+    const isExcept = excIdx >= 0;
+    const idx = isExcept ? excIdx : hideIdx;
+    const selector = rule.slice(idx + (isExcept ? 3 : 2)).trim();
+    return isSafeCssSelector(selector);
+  }
+
+  // user_rules：数组；每项 string；≤1000 字符；总条数 ≤5000；元素隐藏部分的选择器不能突破 CSS 块
   function sanitizeCloudUserRules(arr) {
     const res = { list: [], rejected: 0 };
     if (!Array.isArray(arr)) { if (arr != null) res.rejected = 1; return res; }
     for (let i = 0; i < arr.length; i++) {
       const r = arr[i];
       if (typeof r !== "string" || r.length > 1000 || RULE_CTRL_CHARS.test(r)) { res.rejected++; continue; }
+      if (!isSafeUserRule(r)) { res.rejected++; continue; }
       if (res.list.length >= 5000) { res.rejected++; continue; }   // 超过总条数上限
       res.list.push(r);
     }
@@ -2151,6 +2199,7 @@
   function sanitizeCloudSubscriptions(arr) {
     const res = { list: [], rejected: 0 };
     if (!Array.isArray(arr)) { if (arr != null) res.rejected = 1; return res; }
+    const usedIds = new Set();
     for (let i = 0; i < arr.length; i++) {
       if (res.list.length >= 20) { res.rejected++; continue; }
       const sub = arr[i];
@@ -2159,10 +2208,19 @@
       if (!/^https:\/\//.test(url) || url.length > 500) { res.rejected++; continue; }
       try { new URL(url); } catch (e) { res.rejected++; continue; }
       const m = ((Number(sub.id) || 0) % 100);   // 沿用后台 ID 约定
+      let id = (m >= 1 && m <= 99) ? m : 0;
+      // 订阅 id 决定它占用的 DNR ID 段（后台：SUB_RULE_BASE + id%100 * 10000）。
+      // 两个订阅撞到同一个 id 就会共用一段规则，后应用的那个把前一个整段覆盖掉。
+      if (!id || usedIds.has(id)) {
+        id = 0;
+        for (let k = 1; k < 100; k++) { if (!usedIds.has(k)) { id = k; break; } }
+      }
+      if (!id) { res.rejected++; continue; }
+      usedIds.add(id);
       // 只重建已知键：云端行里的额外键不能原样透传，否则一条脏数据就能改写后台消费的字段
       res.list.push({
         url: url,
-        id: (m >= 1 && m <= 99) ? m : 1,
+        id: id,
         name: typeof sub.name === "string" && sub.name.length <= 120 ? sub.name : "",
         enabled: sub.enabled === false ? false : true
       });
@@ -2251,7 +2309,7 @@
     const wlRes = sanitizeCloudWhitelist(cloud.whitelist);
     const stRes = sanitizeCloudSettings(cloud.settings);
     const rejected = [];
-    if (rulesRes.rejected) rejected.push({ field: "user_rules", count: rulesRes.rejected, reason: "非字符串、超1000字符、含控制字符或超过5000条" });
+    if (rulesRes.rejected) rejected.push({ field: "user_rules", count: rulesRes.rejected, reason: "非字符串、超1000字符、含控制字符、选择器可能突破 CSS 块，或超过5000条" });
     if (subsRes.rejected) rejected.push({ field: "subscriptions", count: subsRes.rejected, reason: "订阅须为 https、可解析、≤500字符，最多20条" });
     if (wlRes.rejected) rejected.push({ field: "whitelist", count: wlRes.rejected, reason: "非法主机名，或 pausedUntil 值非有限正整数时间戳" });
     if (stRes.rejected) rejected.push({ field: "settings", count: stRes.rejected, reason: "非白名单键，或 rulesets 非布尔 / subscriptionInterval 越界(0..168)" });
@@ -2381,7 +2439,13 @@
     const el = document.createElement("div");
     el.id = id;
     el.className = "sync-toast";
-    el.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><polyline points="20 6 9 17 4 12"/></svg><span>' + text + '</span>';
+    // 图标是固定串，用 innerHTML 没问题；正文一律走 textContent。
+    // 服务端返回的错误正文可能带 HTML（代理劫持页、错误页），拼进 innerHTML 就能在设置页
+    // 塞出 <form> / <meta refresh> 之类的假界面骗用户输密码。
+    el.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0"><polyline points="20 6 9 17 4 12"/></svg>';
+    const msg = document.createElement("span");
+    msg.textContent = String(text == null ? "" : text);
+    el.appendChild(msg);
     document.body.appendChild(el);
     setTimeout(() => el.classList.add("show"), 50);
     setTimeout(() => {
