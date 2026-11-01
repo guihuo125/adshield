@@ -360,12 +360,16 @@ async function render() {
   wheelWrap.setAttribute("data-count", siteCount);
   wheelWrap.classList.toggle("inactive", !host);
 
-  // 检查当前站点是否有任何分类命中
-  const hasAnyCat = Object.values(byCategory || {}).reduce((a, b) => a + b, 0) > 0;
+  // 圆环只画计入拦截总数的那几类。URL 参数清理是重定向、不算拦截，
+  // 中心数字走的 byPage 本来就不含它，圆环含它就会出现「中心的数和下面加起来对不上」。
+  // 这一档仍然保留在下面的分类芯片里，它本身有信息量。
+  const wheelCats = Object.assign({}, byCategory || {});
+  delete wheelCats.url_clean;
+  const hasAnyCat = Object.values(wheelCats).reduce((a, b) => a + b, 0) > 0;
   wheelWrap.classList.toggle("empty", !hasAnyCat);
 
   // 无论是否有变化，都强制刷新圆环（避免残留）
-  renderWheel(byCategory, false);
+  renderWheel(wheelCats, false);
 
   // 统计可用性提示：onRuleMatchedDebug 仅开发者模式触发；正式安装版显示说明
   const note = $("#statsNote");

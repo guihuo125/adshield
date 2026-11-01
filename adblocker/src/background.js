@@ -272,7 +272,7 @@ function staticRuleSetCat(ruleId) {
   return "";
 }
 
-function classifyRule(ruleId, url, pageHost) {
+function classifyRule(ruleId, url, pageHost, hostCat) {
   // 0) 静态规则集直接按 ruleId 归属，不再靠 URL 猜
   const fixed = staticRuleSetCat(ruleId);
   if (fixed) return fixed;
@@ -288,19 +288,27 @@ function classifyRule(ruleId, url, pageHost) {
   let reqHost = "";
   try { reqHost = new URL(url).hostname; } catch (e) {}
 
-  // 3) 已知第三方追踪器 -> tracking
+  // 3) 同一个被拦域名只归一类：之前判过就直接沿用，避免同一域名一会儿算追踪、一会儿算广告
+  //    （路径关键词命中与否取决于具体 URL，光靠它判定会飘）
+  if (hostCat) return hostCat;
+
+  // 4) 已知第三方追踪器 -> tracking
   if (reqHost && isThirdPartyTracker(reqHost)) return "tracking";
 
-  // 4) 域名/路径特征含埋点关键词 -> tracking
-  const isTelemetrySignal = /\/(log|logs|analytics|stats?|beacon|track|tracking|metrics?|collect|telemetry|report|impression|pixel|data|cm)(\/|\?|$)/i.test(u)
+  // 5) 域名/路径特征含埋点关键词 -> tracking
+  //    域名里带 telemetry/beacon/trace/gatherer/tdid 这类词的，不管路径怎么写都算追踪：
+  //    galileotelemetry.tencent.com 的 /collect 和 /aegiscontrol/whitelist 是同一个 SDK
+  const isTelemetrySignal = /(telemetry|beacon|gatherer|metrika|tdid|guance|sensorsdata|talkingdata)/i.test(reqHost)
+    || /(?:^|\.|-|_)(analytics|metrics?|tracking|gtag)(?:[.\-_|]|$)/i.test(reqHost)
+    || /\/(log|logs|analytics|stats?|beacon|track|tracking|metrics?|collect|telemetry|report|impression|pixel|data|cm|kv)([/?.$]|$)/i.test(u)
     || /^(log|logs|data|cm|beacon|analytics|track|stat|report|telemetry|metrics|ping|monitor|trace|h5-analytics|nec)\./i.test(reqHost)
-    || /\.(mmstat|cnzz|umeng|talkingdata|growingio|sensorsdata)\./.test(reqHost);
+    || /\.(mmstat|cnzz|umeng|talkingdata|growingio|sensorsdata|guance)\./.test(reqHost);
 
   if (isTelemetrySignal) {
     return "tracking";
   }
 
-  // 5) 走到这里只剩动态规则（订阅 / 用户自定义），它们没有规则集身份，按 URL 特征归到广告
+  // 6) 走到这里只剩动态规则（订阅 / 用户自定义），它们没有规则集身份，按 URL 特征归到广告
   return "ads";
 }
 
@@ -1676,7 +1684,14 @@ if (chrome.declarativeNetRequest.onRuleMatchedDebug) {
 
     const stats = await loadStatsBuffer();
     const ruleId = info.rule && info.rule.ruleId;
-    const cat = classifyRule(ruleId, info.request.url, pageHost);
+    if (!stats.byHostCat) stats.byHostCat = {};
+    const cat = classifyRule(ruleId, info.request.url, pageHost, blockedHost ? stats.byHostCat[blockedHost] : "");
+    // 记下这个域名的归类（只给动态规则记；静态规则有权威 ruleId，参数清理按 URL 判）
+    if (blockedHost && !stats.byHostCat[blockedHost] && !staticRuleSetCat(ruleId) && cat !== "url_clean") {
+      stats.byHostCat[blockedHost] = cat;
+      const hk = Object.keys(stats.byHostCat);
+      if (hk.length > 800) delete stats.byHostCat[hk[0]];
+    }
     // url_clean 规则集是参数清理（重定向），不计入"拦截总数"
     // 注意：按静态 ruleId 区间判定，不能用 cat（cat 基于 URL 特征可能误判）
     const isUrlClean = staticRuleSetCat(ruleId) === "url_clean";

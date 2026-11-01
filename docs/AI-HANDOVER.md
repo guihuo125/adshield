@@ -36,8 +36,8 @@ adblocker/
   _locales/{zh_CN,en}/messages.json   只有 extensionName / extensionDescription 两个键
   icons/                   icon16/32/48/128
   src/
-    background.js          1864 行。Service Worker：规则同步、订阅拉取、统计、消息处理
-    popup.{html,css,js}   662 行 js。工具栏弹窗
+    background.js          1879 行。Service Worker：规则同步、订阅拉取、统计、消息处理
+    popup.{html,css,js}   666 行 js。工具栏弹窗
     options.{html,css,js} 1981 行 js + 48KB html。设置页（6 个页签）
     logger.{html,css,js}  146 行。请求级明细日志
     content/
@@ -127,6 +127,29 @@ content script  --chrome.runtime.sendMessage-->  background.js
 - **水位线存 storage**（`adshield_match_poll_ts`），不放内存 —— MV3 的 Service Worker 空闲就被挂起，内存变量一重启就丢，会漏算或重算。
 - 按 `timeStamp > 水位线` 筛新增。Chrome 会丢掉「超过 5 分钟且没关联到文档」的旧条目，直接取总数会忽上忽下。
 - `__statsLive` 为 true（说明调试事件真的来过）时跳过轮询，避免开发模式重复计数。
+
+### 3.4b 分类口径（弹窗圆环与数字为什么以前会对不上）
+
+三个数走三条路，改任何一个都要一起看：
+
+| 显示位置 | 取数 | 含 URL 参数清理吗 |
+|---|---|---|
+| 圆环中心、「本站已拦截」 | `stats.byPage[host]` | 不含（清理是重定向，不算拦截） |
+| 圆环分段 | `stats.byCategory[host]` 去掉 `url_clean` | 不含（与中心同口径，2.9.96 后修齐） |
+| 分类芯片 | `stats.byCategory[host]` 全量 | 含，URL 那一档只在芯片里出现 |
+
+代码：`popup.js` 的 `render()`（造 `wheelCats` 时 `delete wheelCats.url_clean`）、`background.js` 的 `onRuleMatchedDebug` 分支。
+
+动态规则（订阅、自定义）没有规则集身份，只能按 URL 猜分类，所以同一个域名可能一会儿算追踪一会儿算广告
+（实测样本：`galileotelemetry.tencent.com/collect` 判追踪，同域名的 `/aegiscontrol/whitelist` 判广告）。
+现在两道兜底：
+
+1. `classifyRule` 先看**域名级**强特征（telemetry / beacon / gatherer / metrika / tdid / guance 等子串），
+   再看路径特征；路径边界允许 `.`，所以 `.../common/analytics.js` 能判成追踪（以前要求后面跟 `/ ?` 或结尾，判成广告）。
+2. `stats.byHostCat`（上限 800 个域名）记住每个被拦域名第一次判定的类别，之后同域名一律沿用，不再随路径漂移。
+
+`stats.byHostCat` 是累计数据的一部分，跟着 stats 一起落盘；`resetStats` 会一并清掉。
+**历史计数不会被追溯改写**：已经记成「广告」的那 22 条还在那儿，要干净数字得点设置页的「重置统计」。
 
 ### 3.5 账号与云同步（`shared/auth.js`）
 
@@ -244,10 +267,22 @@ pack.ps1 <版本号> [-ExpectedId <扩展ID>]
 | 13 | MV3 的 SW 会**频繁挂起** | 跨重启要保留的状态（水位线之类）必须存 storage，不能用模块级变量 |
 | 14 | 仓库目录 `D:\temp-adshield-repo` 和工作区要**手工同步** | 改完忘了同步 = 发出去的包和 git 历史不一致。打包前先跑一次全量哈希比对 |
 | 15 | 打包时把 `_metadata` 移到**源码目录之外** | 旧脚本把它改名成 `_metadata.bak-<时间戳>` 留在 `adblocker/` 里，Chrome 打包时连带收进 CRX：2.9.95 的 crx 有 46 个条目（15 个是垃圾），zip 却只有干净的 31 个。发布前必须分别验 zip 和 crx 载荷 |
+| 16 | 弹窗里「拦截数」有三个来源，改一个就要对齐另两个 | 中心数和「本站已拦截」走 `byPage`（不含参数清理），圆环分段和芯片走 `byCategory`（含）。以前圆环含清理、中心不含，用户看到的就是一行对不上的数字。见 §3.4b |
 
 ---
 
 ## 6. 验证方法（可复现）
+
+四个脚本，跑完就算这轮改过东西了：
+
+| 命令 | 要不要开 Chrome | 覆盖什么 |
+|---|---|---|
+| `node tools/verify-classify.js` | 不要 | 分类口径：同域名不漂移、静态规则按 ruleId 权威、参数清理不被吞（19 项） |
+| `node tools/verify-extension.js` | 要（CDP 离屏） | 全局暂停真的停用动态规则、放行规则增删、静态规则集恢复、统计提示条（6 项） |
+| `node tools/verify-round3-fixes.js` | 要 | 第三轮那批修复的行为：间隔落盘、含 `>` 的规则生效、三个导出、弹窗分层、计数阳性对照、同步勾选（22 项） |
+| `node tools/verify-ring.js` | 要 | 弹窗圆环中心 / 分段 / 芯片三者口径一致（7 项） |
+
+后三个都会自己起一个带 `--user-data-dir` 的离屏 Chrome，不碰你正在用的那个。
 
 ### 6.1 基础
 
