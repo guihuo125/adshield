@@ -421,7 +421,7 @@
           <p class="panel-sub">按时间与类型查看 AdShield 的拦截情况，数据仅存储于本地浏览器。</p>
         </div>
 
-        <div class="report-note" id="reportStatsNote" hidden>提示：请求级统计依赖「开发者模式」加载的未打包扩展（declarativeNetRequest 调试事件）。正式安装版不产生请求级数据，下方数字与图表会一直是 0 / 空白；开发者模式加载时，出现拦截后重新进入本页即可看到数据。拦截功能本身不受影响。</div>
+        <div class="report-note" id="reportStatsNote" hidden>提示：正式安装版通过 getMatchedRules 统计，「累计拦截 / 访问过的站点 / 各类型占比」可用；「拦截的域名」与趋势图需要请求级明细，只有「开发者模式」加载的未打包扩展才有。</div>
 
         <div class="stats-grid-3">
           <div class="stat-box">

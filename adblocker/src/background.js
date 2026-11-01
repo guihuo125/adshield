@@ -3,6 +3,11 @@ const ALL_RULESETS = ["ads", "tracking", "annoyances", "url_clean", "malware"];
 const STATS_KEY = "adshield_stats";
 const SETTINGS_KEY = "adshield_settings";
 
+// Chrome 动态规则总上限。实测 Chrome 156 = 30000（chrome.declarativeNetRequest.MAX_NUMBER_OF_DYNAMIC_RULES）。
+// 订阅规则、站点放行规则、用户自定义规则共用这一个池子，不是各自独立的上限。
+const MAX_DYNAMIC_RULES =
+  (chrome.declarativeNetRequest && chrome.declarativeNetRequest.MAX_NUMBER_OF_DYNAMIC_RULES) || 30000;
+
 // 内存中的统计缓冲（供 badge 实时读取，避免 storage 写盘延迟）
 let __statsBuffer = null;
 // 统计可用性标记：onRuleMatchedDebug 只在"开发者模式加载的未打包扩展"中触发，
@@ -35,11 +40,21 @@ async function getSettings() {
   s.rulesets = Object.assign({}, DEFAULT_SETTINGS.rulesets, s.rulesets || {});
   s.pausedUntil = s.pausedUntil || {};
   s.disabledSites = s.disabledSites || [];
-  // 规范化订阅 ID：必须落在 1~99（防御历史脏数据导致 id%100===0 的 ID 段冲突）
+  // 规范化订阅 ID：必须落在 1~99（防御历史脏数据导致 id%100===0 的 ID 段冲突），
+  // 而且同一个 ID 只能属于一个订阅 —— DNR 的 ID 段是按 id%100 分的，
+  // 两条订阅撞号就会共用同一段规则，后应用的把前一个整段覆盖掉。
   if (Array.isArray(s.subscriptions)) {
+    const usedIds = new Set();
     for (const sub of s.subscriptions) {
       const m = ((Number(sub.id) || 0) % 100);
-      sub.id = (m >= 1 && m <= 99) ? m : 1;
+      let id = (m >= 1 && m <= 99) ? m : 0;
+      if (!id || usedIds.has(id)) {
+        id = 0;
+        for (let k = 1; k < 100; k++) { if (!usedIds.has(k)) { id = k; break; } }
+      }
+      if (!id) continue;   // 1~99 个槽位全占满，跳过这条（本地模式下最多 99 条订阅）
+      usedIds.add(id);
+      sub.id = id;
     }
   }
   return s;
@@ -468,10 +483,14 @@ async function applyUserRules(rules) {
     else { skipped.push({ line: trimmed, reason: "无法解析" }); }
   }
 
-  // 长度上限（Chrome 动态规则上限 5000）
-  if (addRules.length > 5000) {
-    const overflow = addRules.splice(5000);
-    overflow.forEach(r => skipped.push({ line: r.condition.urlFilter || r.condition.requestDomains?.[0] || "?", reason: "超过 Chrome 5000 条上限" }));
+  // 长度上限：Chrome 的动态规则是共用一个池子的，订阅规则、站点放行、用户自定义都算在里面。
+  // 上限实测为 30000（chrome.declarativeNetRequest.MAX_NUMBER_OF_DYNAMIC_RULES，Chrome 156），
+  // 这里按剩余额度算，给站点放行规则留 50 条余量。
+  const usedByOthers = existing.length - removeRuleIds.length;
+  const budget = Math.max(0, MAX_DYNAMIC_RULES - usedByOthers - 50);
+  if (addRules.length > budget) {
+    const overflow = addRules.splice(budget);
+    overflow.forEach(r => skipped.push({ line: r.condition.urlFilter || r.condition.requestDomains?.[0] || "?", reason: "超过 Chrome 动态规则总上限 " + MAX_DYNAMIC_RULES + " 条" }));
   }
 
   try {
@@ -544,58 +563,8 @@ function parseSubscriptionText(text) {
   return trimmed.split(/\r?\n/);
 }
 
-// ===== 路径规则智能过滤（D2）=====
-// 高价值关键词（含这些的路径规则保留）
-const HIGH_VALUE_PATH_KEYWORDS = [
-  "ads", "adserver", "adservice", "advert", "adframe", "admanager",
-  "banner", "banners", "sponsor", "sponsored", "popunder", "popup",
-  "track", "tracking", "click", "beacon", "analytics", "stat", "stats",
-  "counter", "impression", "pixel", "promo", "promotion", "partner",
-  "affiliate", "campaign", "telemetry", "log", "logs", "metrics",
-  "collect", "report", "adtech", "adsense", "adzone", "adslot",
-  "adunit", "adspace", "adserv"
-];
-
-// 低价值/危险路径模式（过滤掉）
-const LOW_VALUE_PATH_PATTERNS = [
-  /^\/+$/,                    // 只有斜杠
-  /^\/[a-z0-9]\/?$/,           // 单字符路径（如 /a/）
-  /^\/[a-z0-9]{1,2}\/$/,       // 2 字符以内
-  /^\/\d+\/?$/,               // 纯数字
-  /^\/[a-z]{1,2}\d*\/?$/      // 短字母+数字
-];
-
-// 评估路径规则的质量分数（0~100）
-function scorePathRule(path) {
-  if (!path || typeof path !== "string") return 0;
-  const p = path.toLowerCase();
-
-  // 过长（> 200）视为复杂规则，降级
-  if (p.length > 200) return 10;
-  // 过短（< 4）过滤
-  if (p.length < 4) return 0;
-
-  // 低价值模式直接拒绝
-  for (const re of LOW_VALUE_PATH_PATTERNS) {
-    if (re.test(p)) return 0;
-  }
-
-  // 命中高价值关键词：加分
-  let score = 20;
-  for (const kw of HIGH_VALUE_PATH_KEYWORDS) {
-    if (p.includes(kw)) { score += 40; break; }
-  }
-
-  // 长度适中加分（6~50 之间最佳）
-  if (p.length >= 6 && p.length <= 50) score += 20;
-  else if (p.length > 50 && p.length <= 100) score += 10;
-  else if (p.length > 100) score -= 10;
-
-  // 包含通配符 * 降级（易误拦）
-  if (p.includes("*") && !p.includes("ads") && !p.includes("banner")) score -= 15;
-
-  return Math.max(0, Math.min(100, score));
-}
+// 订阅里的路径规则按社区列表原有顺序保留：只做去重 + 危险规则过滤，再取前 800 条。
+// 不做关键词打分——社区列表本身已按价值排好序，按关键词筛反而会误杀冷门但有效的规则。
 
 // ===== 只拉取订阅文本（可并发） =====
 async function fetchSubscriptionText(url) {
@@ -1481,6 +1450,10 @@ async function scheduleSubscriptionCheck() {
 }
 
 chrome.alarms.onAlarm.addListener(async (a) => {
+  if (a.name === MATCH_POLL_ALARM) {
+    await pollMatchedRules();
+    return;
+  }
   if (a.name === "adshield-first-sub-fetch") {
     await chrome.alarms.clear("adshield-first-sub-fetch");
     updateAllSubscriptions().catch((e) => {
@@ -1765,6 +1738,79 @@ if (chrome.declarativeNetRequest.onRuleMatchedDebug) {
   console.log("[AdShield] onRuleMatchedDebug 不可用（需开发者模式加载）");
 }
 
+/* ============ 正式安装版的请求级统计 ============ */
+// onRuleMatchedDebug 只存在于「开发者模式加载的未打包扩展」里，正式安装版没有这个事件，
+// 所以正式版的统计改走 getMatchedRules()：它对持有 declarativeNetRequestFeedback 权限的扩展
+// 同样可用（实测 Chrome 156），返回命中过的规则列表（带命中时间戳和 tabId）。
+// 配额：20 次 / 10 分钟（MAX_GETMATCHEDRULES_CALLS_PER_INTERVAL / GETMATCHEDRULES_QUOTA_INTERVAL），
+// 这里 60 秒一次，远低于配额。
+const MATCH_POLL_ALARM = "adshield-match-poll";
+const MATCH_POLL_MINUTES = 1;
+const MATCH_TS_KEY = "adshield_match_poll_ts";
+
+async function pollMatchedRules() {
+  // 开发模式下 onRuleMatchedDebug 给的数据更全（带 URL、分类、时间线），不重复计
+  if (__statsLive) return;
+  if (!chrome.declarativeNetRequest || !chrome.declarativeNetRequest.getMatchedRules) return;
+
+  let res;
+  try {
+    res = await chrome.declarativeNetRequest.getMatchedRules();
+  } catch (e) {
+    return;   // 配额用完 / 权限不足：跳过这一轮，不刷错误日志
+  }
+  const infos = (res && res.rulesMatchedInfo) || [];
+  const now = Date.now();
+  // 水位线放 storage：MV3 的 Service Worker 空闲就会被挂起，内存变量一重启就丢，
+  // 丢一次就会漏算或重算那一分钟的命中。
+  const store = await chrome.storage.local.get(MATCH_TS_KEY);
+  const since = store[MATCH_TS_KEY] || (now - MATCH_POLL_MINUTES * 60 * 1000);
+  await chrome.storage.local.set({ [MATCH_TS_KEY]: now });
+  // 只算本轮之后新命中的：老的条目会因为「超过 5 分钟且没关联到文档」被 Chrome 丢掉，
+  // 直接取总数会随保留窗口忽上忽下。
+  const fresh = infos.filter(i => i && i.timeStamp && i.timeStamp > since);
+  if (!fresh.length) return;
+
+  // 按 tabId 归到站点；标签已关掉的拿不到 URL，只计总数
+  const tabIds = Array.from(new Set(fresh.map(i => i.tabId).filter(id => id != null && id >= 0)));
+  const tabHosts = {};
+  for (const id of tabIds) {
+    try {
+      const tab = await chrome.tabs.get(id);
+      if (tab && tab.url) { try { tabHosts[id] = new URL(tab.url).hostname; } catch (e) {} }
+    } catch (e) {}
+  }
+
+  const stats = await loadStatsBuffer();
+  let total = 0;
+  for (const info of fresh) {
+    const ruleId = info.rule && info.rule.ruleId;
+    const cat = staticRuleSetCat(ruleId) || "ads";   // 动态规则（订阅/自定义）归到广告
+    const host = tabHosts[info.tabId] || "";
+    // url_clean 是重定向不是拦截，不计入总数
+    if (cat !== "url_clean") total++;
+    const key = host || "(全局)";
+    if (!stats.byCategory[key]) {
+      stats.byCategory[key] = { ads: 0, tracking: 0, annoyances: 0, url_clean: 0, malware: 0 };
+    }
+    stats.byCategory[key][cat] = (stats.byCategory[key][cat] || 0) + 1;
+    if (host) stats.byPage[host] = (stats.byPage[host] || 0) + 1;
+  }
+  stats.total = (stats.total || 0) + total;
+  scheduleFlush();
+}
+
+async function ensureMatchPollAlarm() {
+  // 不靠「onRuleMatchedDebug 这个 API 存不存在」来判断是不是开发模式：
+  // 打包版里它可能存在但永不触发，那样就永远不会去建轮询，统计就一直是空的。
+  // 只在调试事件真的来过（__statsLive）时，pollMatchedRules 自己会跳过。
+  try {
+    const cur = await chrome.alarms.get(MATCH_POLL_ALARM);
+    if (cur && cur.periodInMinutes === MATCH_POLL_MINUTES) return;
+  } catch (e) {}
+  chrome.alarms.create(MATCH_POLL_ALARM, { periodInMinutes: MATCH_POLL_MINUTES });
+}
+
 // 标签关闭时清理通知状态
 chrome.tabs.onRemoved.addListener((tabId) => {
   __notifyState.delete(tabId);
@@ -1778,6 +1824,8 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   } catch (e) {
     console.log("[AdShield] 启动应用用户规则失败:", e);
   }
+  // 正式安装版的统计轮询（开发模式跳过）
+  try { await ensureMatchPollAlarm(); } catch (e) {}
 })();
 
 /* ============ 清理孤儿订阅规则 ============ */
