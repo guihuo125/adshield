@@ -1,23 +1,7 @@
 const SETTINGS_KEY = "adshield_settings";
 const STATS_KEY = "adshield_stats";
-const DEFAULT_SETTINGS = {
-  enabled: true,
-  disabledSites: [],
-  pausedUntil: {},
-  globalPausedUntil: 0,
-  rulesets: { ads: true, tracking: true, annoyances: true, url_clean: true, malware: true },
-  antiDetect: true,
-  assist: true,
-  showBadge: true,
-  theme: "auto"
-};
-const RULESETS = [
-  { id: "ads",        label: "广告拦截",   color: "#FD3638" },
-  { id: "tracking",   label: "追踪防护",   color: "#A78BFA" },
-  { id: "annoyances", label: "干扰过滤",   color: "#F79009" },
-  { id: "url_clean",  label: "URL 清理",   color: "#00AEF0" },
-  { id: "malware",    label: "恶意防护",   color: "#7F1D1D" }
-];
+const { DEFAULT_SETTINGS, RULESETS, CAT_KEYS, CAT_LABELS, CAT_COLORS } = window.adshieldConfig;
+
 const FEATURES = [
   { key: "antiDetect", label: "反拦截检测" }
 ];
@@ -25,6 +9,11 @@ const PAUSE_TYPES = { 60: "1 小时", 1440: "1 天", 0: "永久" };
 
 const $ = (s) => document.querySelector(s);
 let currentHost = "";
+// 白名单 / 定时暂停统一走 shared/host.js 的子域匹配，与网络层、元素隐藏层保持一致。
+// 之前这里用精确匹配 disabledSites.includes(host)，而设置页存的是剥 www 的 example.com
+// —— 于是用户明明暂停了整站，弹窗却显示"未暂停"。
+const { normalizeHost, hostMatches, anyHostMatches, isPausedUntil, pausedUntilRemaining } = window.adshieldHost;
+const { downloadJson } = window.adshieldDom;
 
 async function readSettings() {
   const store = await chrome.storage.local.get(SETTINGS_KEY);
@@ -37,13 +26,16 @@ async function readSettings() {
 async function writeSettings(next) {
   await chrome.storage.local.set({ [SETTINGS_KEY]: next });
 }
-async function readStats() {
+function readStats() {
   // 优先向 background 请求（bg 内存里有实时数据）
   return new Promise((resolve) => {
     chrome.runtime.sendMessage({ type: "getStats" }, (resp) => {
       if (chrome.runtime.lastError || !resp) {
         chrome.storage.local.get(STATS_KEY).then(store => {
-          resolve(store[STATS_KEY] || { total: 0, byPage: {}, byBlocked: {}, byCategory: {} });
+          // live 必须显式给 false：缺字段时 `stats.live === true` 不成立，
+          // 而 `stats.live !== false` 成立 —— 三处判定会各说各话
+          resolve(Object.assign({ live: false },
+            store[STATS_KEY] || { total: 0, byPage: {}, byBlocked: {}, byCategory: {} }));
         });
       } else {
         resolve(resp);
@@ -54,14 +46,14 @@ async function readStats() {
 
 function isPaused(host, s) {
   if (!host) return false;
-  if (s.disabledSites.includes(host)) return true;
-  const until = s.pausedUntil[host];
-  return !!(until && until > Date.now());
+  if (anyHostMatches(host, s.disabledSites)) return true;
+  return isPausedUntil(s.pausedUntil, host);
 }
 function pauseRemainText(host, s) {
-  if (s.disabledSites.includes(host)) return "已永久暂停";
-  const until = s.pausedUntil[host];
-  if (!until || until <= Date.now()) return "";
+  if (!host) return "";
+  if (anyHostMatches(host, s.disabledSites)) return "已永久暂停";
+  const until = pausedUntilRemaining(s.pausedUntil, host);
+  if (!until) return "";
   const mins = Math.ceil((until - Date.now()) / 60000);
   if (mins >= 1440) return `${Math.ceil(mins/1440)} 天后自动恢复`;
   if (mins >= 60) return `${Math.ceil(mins/60)} 小时后自动恢复`;
@@ -149,7 +141,7 @@ function renderMenuLists(s) {
 
 /* ---------- Wheel ---------- */
 // Ghostery 风格细线 + 多色分段（ads/tracking/annoyances/url_clean/malware）
-const CATS = ["ads", "tracking", "annoyances", "url_clean", "malware"];
+const CATS = CAT_KEYS;
 const SEG_CLASS = { ads: "seg-ads", tracking: "seg-track", annoyances: "seg-anno", url_clean: "seg-url", malware: "seg-malware" };
 
 const __wheelDisplay = { ads: 0, tracking: 0, annoyances: 0, url_clean: 0, malware: 0 };
@@ -264,8 +256,8 @@ function renderWheel(catData, animate) {
 }
 
 /* ---------- 分类 chip 渲染 ---------- */
-const CAT_LABELS = { ads: "广告", tracking: "追踪", annoyances: "干扰", url_clean: "URL", malware: "恶意" };
-const CAT_COLORS = { ads: "#FD3638", tracking: "#A78BFA", annoyances: "#F79009", url_clean: "#00AEF0", malware: "#7F1D1D" };
+
+
 
 function renderCatChips(byCategory) {
   const row = $("#catRow");
@@ -295,19 +287,60 @@ function renderCatChips(byCategory) {
 }
 
 /* ---------- 主渲染 ---------- */
+// 正式版统计查询的限流：getMatchedRules 配额 20 次 / 10 分钟，
+// 而 popup 每 2 秒轮询一次。这里 60 秒最多查一次，且换标签页时立即允许重查
+// （新标签页的初始计数用户最想立刻看到）。
+const TAB_STATS_COOLDOWN_MS = 60000;
+let __tabStatsAt = 0;
+let __tabStatsTabId = -1;
+function __tabStatsAllowed(tabId) {
+  const now = Date.now();
+  if (tabId !== __tabStatsTabId) {         // 换了标签页：放行
+    __tabStatsTabId = tabId;
+    __tabStatsAt = now;
+    return true;
+  }
+  if (now - __tabStatsAt < TAB_STATS_COOLDOWN_MS) return false;
+  __tabStatsAt = now;
+  return true;
+}
+
 async function render() {
   let host = "";
+  let tabId = -1;
   try {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (tab?.url && /^https?:/.test(tab.url)) host = new URL(tab.url).hostname;
+    tabId = tab?.id ?? -1;
   } catch {}
   currentHost = host;
 
   const s = await readSettings();
   const stats = await readStats();
   const byPage = stats.byPage || {};
-  const byCategory = (stats.byCategory || {})[host] || {};
-  const siteCount = byPage[host] || 0;
+  let byCategory = (stats.byCategory || {})[host] || {};
+  let siteCount = byPage[host] || 0;
+
+  // 正式安装版（打包后）拿不到请求级明细：
+  // declarativeNetRequestFeedback 权限对商店安装版被忽略（Chrome 官方文档），
+  // onRuleMatchedDebug 不触发，byPage 永远是空的。
+  // 但用户打开弹窗时已授予 activeTab，此时可按 tabId 查 getMatchedRules()，
+  // 拿到该标签页真实的命中计数 —— 这是正式版唯一可靠的「本站拦截数」来源。
+  //
+  // 配额：getMatchedRules 是 20 次 / 10 分钟。下面每 2 秒轮询一次会直接超限，
+  // 所以正式版这条路径单独限流：60 秒最多查一次，且只查当前标签页。
+  if (stats.live !== true && tabId >= 0 && __tabStatsAllowed(tabId)) {
+    const r = await new Promise((resolve) => {
+      chrome.runtime.sendMessage({ type: "getTabStats", tabId }, (resp) => {
+        if (chrome.runtime.lastError) resolve(null);
+        else resolve(resp);
+      });
+    });
+    if (r && r.ok) {
+      siteCount = r.total || 0;
+      byCategory = r.byCategory || {};
+    }
+  }
 
   // Section head
   $("#siteHost").textContent = host || "无活动页面";
@@ -315,7 +348,7 @@ async function render() {
 
   // Pause
   const paused = isPaused(host, s);
-  const isPermanent = paused && s.disabledSites.includes(host);
+  const isPermanent = paused && anyHostMatches(host, s.disabledSites);
   const card = $("#pauseCard");
   card.classList.toggle("paused", paused);
   card.classList.toggle("permanent", isPermanent);
@@ -371,9 +404,12 @@ async function render() {
   // 无论是否有变化，都强制刷新圆环（避免残留）
   renderWheel(wheelCats, false);
 
-  // 统计可用性提示：onRuleMatchedDebug 仅开发者模式触发；正式安装版显示说明
+  // 统计可用性提示：onRuleMatchedDebug 仅开发者模式触发；正式安装版显示说明。
+  // 判定统一为「只有明确拿到 live === true 才隐藏」——
+  // 此前 popup/logger 用 `live !== false`、options 用 `live === true`，
+  // live 字段缺失时两者结论相反。降级路径现已显式补上 live: false。
   const note = $("#statsNote");
-  if (note) note.hidden = stats.live !== false;
+  if (note) note.hidden = stats.live === true;
 
   // Stats（注意：本站数用 statSite，累计数用 statTotal）
   const elSite = $("#statSite");
@@ -399,19 +435,20 @@ async function render() {
 $("#pauseBtn").addEventListener("click", async () => {
   if (!currentHost) return;
   const s = await readSettings();
+  const host = normalizeHost(currentHost);   // 写入统一用归一化形式
   if (isPaused(currentHost, s)) {
     // 恢复
-    s.disabledSites = s.disabledSites.filter(h => h !== currentHost);
-    delete s.pausedUntil[currentHost];
+    s.disabledSites = s.disabledSites.filter(h => !hostMatches(h, host));
+    delete s.pausedUntil[host];
   } else {
     // 用上次选择的时长（默认 1 小时）
     const mins = s._lastPauseType || 60;
-    s.disabledSites = s.disabledSites.filter(h => h !== currentHost);
+    s.disabledSites = s.disabledSites.filter(h => !hostMatches(h, host));
     if (mins === 0) {
-      s.disabledSites.push(currentHost);
-      delete s.pausedUntil[currentHost];
+      s.disabledSites.push(host);
+      delete s.pausedUntil[host];
     } else {
-      s.pausedUntil[currentHost] = Date.now() + mins * 60000;
+      s.pausedUntil[host] = Date.now() + mins * 60000;
     }
   }
   await writeSettings(s);
@@ -423,8 +460,9 @@ $("#pauseTypeBtn").addEventListener("click", async (e) => {
   if (!currentHost) return;
   const s = await readSettings();
   if (isPaused(currentHost, s)) {
-    s.disabledSites = s.disabledSites.filter(h => h !== currentHost);
-    delete s.pausedUntil[currentHost];
+    const host = normalizeHost(currentHost);
+    s.disabledSites = s.disabledSites.filter(h => !hostMatches(h, host));
+    delete s.pausedUntil[host];
     await writeSettings(s);
     render();
     return;
@@ -438,13 +476,14 @@ document.querySelectorAll(".pause-option").forEach(btn => {
     if (!currentHost) return;
     const mins = parseInt(btn.dataset.min, 10);
     const s = await readSettings();
+    const host = normalizeHost(currentHost);
     s._lastPauseType = mins;   // 记住本次选择
-    s.disabledSites = s.disabledSites.filter(h => h !== currentHost);
+    s.disabledSites = s.disabledSites.filter(h => !hostMatches(h, host));
     if (mins === 0) {
-      s.disabledSites.push(currentHost);
-      delete s.pausedUntil[currentHost];
+      s.disabledSites.push(host);
+      delete s.pausedUntil[host];
     } else {
-      s.pausedUntil[currentHost] = Date.now() + mins * 60000;
+      s.pausedUntil[host] = Date.now() + mins * 60000;
     }
     await writeSettings(s);
     $("#pauseMenu").classList.remove("open");
@@ -540,12 +579,13 @@ $("#actWhitelist").addEventListener("click", async () => {
     return;
   }
   const s = await readSettings();
-  const inList = s.disabledSites.includes(currentHost);
+  const host = normalizeHost(currentHost);
+  const inList = anyHostMatches(host, s.disabledSites);
   if (inList) {
-    s.disabledSites = s.disabledSites.filter(h => h !== currentHost);
+    s.disabledSites = s.disabledSites.filter(h => !hostMatches(h, host));
   } else {
-    s.disabledSites.push(currentHost);
-    delete s.pausedUntil[currentHost];   // 加入白名单时清掉临时暂停
+    s.disabledSites.push(host);
+    delete s.pausedUntil[host];   // 加入白名单时清掉临时暂停
   }
   await writeSettings(s);
   render();
@@ -556,7 +596,7 @@ $("#actWhitelist").addEventListener("click", async () => {
 function updateWhitelistLabel(s) {
   const label = $("#whitelistLabel");
   if (!label) return;
-  const inList = currentHost && s.disabledSites && s.disabledSites.includes(currentHost);
+  const inList = currentHost && anyHostMatches(currentHost, s.disabledSites);
   label.textContent = inList ? "移出白名单" : "加入白名单";
 }
 
@@ -615,16 +655,10 @@ $("#actReport").addEventListener("click", async () => {
       规则集: s.rulesets,
       全局启用: s.enabled,
       反拦截检测: s.antiDetect,
-      本站已暂停: s.disabledSites.includes(currentHost)
+      本站已暂停: anyHostMatches(currentHost, s.disabledSites)
     }
   };
-  const blob = new Blob([JSON.stringify(report, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = `adshield-report-${currentHost}-${Date.now()}.json`;
-  a.click();
-  URL.revokeObjectURL(url);
+  downloadJson(report, `adshield-report-${currentHost}-${Date.now()}.json`);
 });
 
 // 全局启用开关

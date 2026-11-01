@@ -1,33 +1,15 @@
 const SETTINGS_KEY = "adshield_settings";
 const STATS_KEY = "adshield_stats";
-const DEFAULT_SETTINGS = {
-  enabled: true,
-  disabledSites: [],
-  pausedUntil: {},
-  globalPausedUntil: 0,
-  rulesets: { ads: true, tracking: true, annoyances: true, url_clean: true, malware: true },
-  antiDetect: true,
-  assist: true,
-  showBadge: true,
-  theme: "auto"
-};
-const RULESETS = [
-  { id: "ads",        label: "广告拦截", desc: "拦截横幅、弹窗、视频贴片等展示广告",       color: "#FD3638" },
-  { id: "tracking",   label: "追踪防护", desc: "阻止第三方跨站追踪器收集您的浏览行为",     color: "#A78BFA" },
-  { id: "annoyances", label: "干扰过滤", desc: "屏蔽推送请求、弹窗挂件、反拦截检测脚本",   color: "#F79009" },
-  { id: "url_clean",  label: "URL 清理", desc: "自动去除链接里的 utm 等追踪参数",          color: "#00AEF0" },
-  { id: "malware",    label: "恶意防护", desc: "拦截浏览器挖矿脚本与已知恶意/欺诈分发域名", color: "#7F1D1D" }
-];
-const CATS = [
-  { key: "ads",        label: "广告", color: "#FD3638" },
-  { key: "tracking",   label: "追踪", color: "#A78BFA" },
-  { key: "annoyances", label: "干扰", color: "#F79009" },
-  { key: "url_clean",  label: "URL",  color: "#00AEF0" },
-  { key: "malware",    label: "恶意", color: "#7F1D1D" }
-];
+const { DEFAULT_SETTINGS, CATS, MSG } = window.adshieldConfig;
+
+
 
 const $ = (s) => document.querySelector(s);
 const $$ = (s) => document.querySelectorAll(s);
+// 白名单 / 定时暂停统一走 shared/host.js 的子域匹配，与网络层、元素隐藏层、弹窗保持一致
+// HTML 转义与文件下载统一走 shared/dom.js
+const { normalizeHost, isValidHost, hostMatches, anyHostMatches, normalizeHostList } = window.adshieldHost;
+const { downloadBlob } = window.adshieldDom;
 
 // 兜底：3 秒后无论 JS 是否完成，都移除 loading（防永久隐藏）
 setTimeout(() => { try { document.body.classList.remove("loading"); } catch(e){} }, 3000);
@@ -208,15 +190,20 @@ async function checkUpdate() {
 }
 
 // 简易 HTML 转义（用于名称）
-function escapeHtmlSimple(s) {
-  return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-}
+// HTML 转义统一走 shared/dom.js（原先此处有两份逐字符相同的实现）
+function escapeHtmlSimple(s) { return escapeHtml(s); }
 
 // 检查更新按钮事件
 document.addEventListener("click", (e) => {
   const item = e.target.closest('.link-item[data-action="checkUpdate"]');
   if (!item) return;
   checkUpdate();
+});
+
+// 运行时诊断页入口
+document.addEventListener("click", (e) => {
+  if (!e.target.closest("#btnProbe")) return;
+  chrome.tabs.create({ url: chrome.runtime.getURL("src/probe.html") });
 });
 
 // 下载链接点击提示（<a download> 会由浏览器自动处理，这里只做提示）
@@ -321,7 +308,10 @@ async function readStats() {
       if (chrome.runtime.lastError || !resp) {
         // 降级：直接读 storage
         chrome.storage.local.get(STATS_KEY).then(store => {
-          resolve(store[STATS_KEY] || { total: 0, byPage: {}, byBlocked: {}, byCategory: {} });
+          // live 必须显式给 false：缺字段时 `stats.live === true` 不成立，
+          // 而 `stats.live !== false` 成立 —— 三处判定会各说各话
+          resolve(Object.assign({ live: false },
+            store[STATS_KEY] || { total: 0, byPage: {}, byBlocked: {}, byCategory: {} }));
         });
       } else {
         resolve(resp);
@@ -339,7 +329,7 @@ async function autoCheckSubscriptions() {
   if (Date.now() - __lastAutoCheck < AUTO_CHECK_COOLDOWN) return;
   __lastAutoCheck = Date.now();
   try {
-    const resp = await sendMessage("checkSubscriptionUpdates");
+    const resp = await sendMessage(MSG.CHECK_SUBSCRIPTION_UPDATES);
     if (resp && resp.ok && resp.changed > 0) {
       // 有更新 → 强制刷新列表显示横幅
       await loadSubscriptions({ force: true });
@@ -427,8 +417,8 @@ async function renderSites() {
   const permanent = [];
   const temporary = [];
 
-  // 永久白名单
-  for (const host of s.disabledSites) {
+  // 永久白名单（归一化后去重：example.com 与 www.example.com 是同一个站）
+  for (const host of normalizeHostList(s.disabledSites)) {
     permanent.push({ host, meta: "永久暂停", count: byPage[host] || 0 });
   }
   // 定时暂停（过滤过期）
@@ -438,7 +428,7 @@ async function renderSites() {
       const text = mins >= 1440
         ? `${Math.ceil(mins/1440)} 天后自动恢复`
         : mins >= 60 ? `${Math.ceil(mins/60)} 小时后自动恢复` : `${mins} 分钟后自动恢复`;
-      temporary.push({ host, meta: text, count: byPage[host] || 0 });
+      temporary.push({ host: normalizeHost(host), meta: text, count: byPage[host] || 0 });
     }
   }
   // 按拦截数降序
@@ -489,8 +479,11 @@ function renderGroup(listSel, countSel, cardSel, items, emptyText) {
     `;
     li.querySelector(".site-resume").addEventListener("click", async () => {
       const cur = await readSettings();
-      cur.disabledSites = cur.disabledSites.filter(h => h !== item.host);
-      delete cur.pausedUntil[item.host];
+      // 用子域匹配删除：存的是 example.com 时，www.example.com 那一项也要一起清掉
+      cur.disabledSites = cur.disabledSites.filter(h => !hostMatches(h, item.host));
+      for (const k of Object.keys(cur.pausedUntil || {})) {
+        if (hostMatches(k, item.host)) delete cur.pausedUntil[k];
+      }
       await writeSettings(cur);
       renderSites();
     });
@@ -498,9 +491,7 @@ function renderGroup(listSel, countSel, cardSel, items, emptyText) {
   }
 }
 
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-}
+function escapeHtml(s) { return window.adshieldDom.escapeHtml(s); }
 
 /* ---------- 网站页：添加 / 清空事件 ---------- */
 function setupSiteEvents() {
@@ -517,18 +508,17 @@ function setupSiteEvents() {
 
   async function addSite() {
     if (!addInput) return;
-    let host = (addInput.value || "").trim().toLowerCase();
+    // 剥离协议和路径（normalizeHost 统一处理 www 与大小写）
+    const host = normalizeHost(addInput.value || "");
     if (!host) { showHint("请输入域名", false); return; }
 
-    // 剥离协议和路径
-    host = host.replace(/^https?:\/\//, "").replace(/\/.*$/, "").replace(/^www\./, "");
-    if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(host)) {
+    if (!isValidHost(host)) {
       showHint("域名格式无效：" + host, false);
       return;
     }
 
     const s = await readSettings();
-    if (s.disabledSites.includes(host)) {
+    if (anyHostMatches(host, s.disabledSites)) {
       showHint("该网站已在白名单中", false);
       return;
     }
@@ -1047,16 +1037,15 @@ async function renderCosmeticRules() {
       '<button class="cosmetic-remove" data-idx="' + idx + '">删除</button>';
 
     li.querySelector(".cosmetic-remove").addEventListener("click", async () => {
-      const cur = await chrome.storage.local.get("adshield_user_cosmetic");
-      const arr = cur.adshield_user_cosmetic || [];
-      arr.splice(idx, 1);
-      await chrome.storage.local.set({ "adshield_user_cosmetic": arr });
       const store2 = await chrome.storage.local.get("adshield_user_rules");
       const userRules = (store2.adshield_user_rules || []).slice();
       // 按值整批过滤会把「同一行写了两次」一起删掉，这里只摘掉其中一条
       const at = userRules.lastIndexOf(raw);
       if (at >= 0) userRules.splice(at, 1);
-      // 规则本体交给 background 写：这边再 set 一次会和应用流程抢同一个键
+      // 规则本体交给 background 写：这边再 set 一次会和应用流程抢同一个键。
+      // adshield_user_cosmetic 同理 —— 它的权威写入者是 background 的 applyUserRules，
+      // 它会根据 adshield_user_rules 里剩下的 ## 规则重算并覆盖。
+      // 这页面自己写一次会造成两个写入者竞争：删掉的规则可能被 background 的重算带回来。
       await chrome.runtime.sendMessage({ type: "saveUserRules", rules: userRules });
       await renderCosmeticRules();
       await loadUserRules();
@@ -1320,7 +1309,7 @@ async function loadSubscriptions(opts) {
     return;
   }
 
-  const resp = await sendMessage("getSubscriptions");
+  const resp = await sendMessage(MSG.GET_SUBSCRIPTIONS);
   if (!resp || !resp.ok) {
     // 三条骨架是 HTML 里写死的，只 return 的话页面会永远停在「加载中」，
     // 用户既看不到失败也不知道可以再试一次
@@ -1449,10 +1438,10 @@ function renderSubsList(subs, interval, lastCheck) {
       btn.textContent = "更新中...";
       btn.disabled = true;
       try {
-        await sendMessage("saveSubscription", { subscription: { id: sub.id, url: sub.url, enabled: sub.enabled } });
+        await sendMessage(MSG.SAVE_SUBSCRIPTION, { subscription: { id: sub.id, url: sub.url, enabled: sub.enabled } });
         // 清除该订阅的"有更新"标记
         if (sub.hasUpdate) {
-          await sendMessage("clearSubscriptionUpdateFlag", { id: sub.id });
+          await sendMessage(MSG.CLEAR_SUBSCRIPTION_UPDATE_FLAG, { id: sub.id });
         }
         await loadSubscriptions({ force: true });
       } catch (err) {
@@ -1468,7 +1457,7 @@ function renderSubsList(subs, interval, lastCheck) {
         type: "danger"
       });
       if (!ok) return;
-      await sendMessage("removeSubscription", { id: sub.id });
+      await sendMessage(MSG.REMOVE_SUBSCRIPTION, { id: sub.id });
       await loadSubscriptions({ force: true });
     });
     ul.appendChild(li);
@@ -1537,7 +1526,7 @@ if (subAddBtn) {
     if (!/^https?:\/\//.test(url)) { hint.textContent = "URL 必须以 http(s):// 开头"; hint.className = "hint err"; setTimeout(() => { hint.textContent = ""; }, 3000); return; }
     hint.textContent = "正在拉取并验证...";
     hint.className = "hint";
-    const resp = await sendMessage("saveSubscription", { subscription: { url } });
+    const resp = await sendMessage(MSG.SAVE_SUBSCRIPTION, { subscription: { url } });
     if (resp.ok && resp.result && resp.result.ok) {
       // 成功
       const result = resp.result;
@@ -1587,7 +1576,7 @@ const bannerDismiss = $("#subUpdateBannerDismiss");
 if (bannerDismiss) {
   bannerDismiss.addEventListener("click", async () => {
     // 忽略：清除所有 hasUpdate 标记
-    await sendMessage("clearSubscriptionUpdateFlag");
+    await sendMessage(MSG.CLEAR_SUBSCRIPTION_UPDATE_FLAG);
     await loadSubscriptions({ force: true });
   });
 }
@@ -1643,7 +1632,7 @@ async function doCheck() {
   setBtnState("checking");
   const hint = $("#subHint");
   try {
-    const resp = await sendMessage("checkSubscriptionUpdates");
+    const resp = await sendMessage(MSG.CHECK_SUBSCRIPTION_UPDATES);
     const changed = (resp && resp.changed) || 0;
     if (changed > 0) {
       if (hint) {
@@ -1669,7 +1658,7 @@ async function doUpdateAll() {
   setBtnState("updating");
   const hint = $("#subHint");
   try {
-    const resp = await sendMessage("updateAllSubscriptions");
+    const resp = await sendMessage(MSG.UPDATE_ALL_SUBSCRIPTIONS);
     const result = (resp && resp.result) || {};
     if (hint) {
       if (result.fail > 0) {
@@ -1714,7 +1703,7 @@ if (restoreBtn) {
     restoreBtn.disabled = true;
     restoreBtn.textContent = "拉取中...";
     try {
-      const resp = await sendMessage("restoreDefaultSubscriptions");
+      const resp = await sendMessage(MSG.RESTORE_DEFAULT_SUBSCRIPTIONS);
       if (resp && resp.ok) {
         if (resp.added > 0) {
           await loadSubscriptions({ force: true });
@@ -1744,16 +1733,10 @@ if (restoreBtn) {
 
 
 /* ============ 下载 helper ============ */
+// 统一走 shared/dom.js 的 downloadBlob（含延迟 revoke，避免下载拿到空文件）
 function downloadFile(filename, text, mime) {
   const blob = new Blob([text], { type: (mime || "application/json") + ";charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  document.body.appendChild(a);
-  a.click();
-  a.remove();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  downloadBlob(blob, filename);
 }
 function stampDate() { return new Date().toISOString().slice(0, 10); }
 function setStatus(text, kind) {
@@ -1859,7 +1842,7 @@ function setupReportActions() {
       { title: "重置统计", confirmText: "清空", cancelText: "取消", type: "warning" }
     );
     if (!ok) return;
-    const resp = await sendMessage("resetStats", {});
+    const resp = await sendMessage(MSG.RESET_STATS, {});
     if (resp && resp.ok === false) {
       setStatus("重置失败：" + (resp.error || "未知错误"), "err");
       setTimeout(() => setStatus(""), 4000);
@@ -1880,7 +1863,7 @@ function setupSubscriptionInterval() {
     if (!Number.isFinite(hours) || hours < 0) return;
     const hint = $("#subHint");
     const label = hours === 0 ? "不自动更新" : ("每 " + hours + " 小时");
-    const resp = await sendMessage("setSubscriptionInterval", { hours });
+    const resp = await sendMessage(MSG.SET_SUBSCRIPTION_INTERVAL, { hours });
     if (resp && resp.ok === false) {
       sel.value = String(resp.interval != null ? resp.interval : hours);
       if (hint) { hint.textContent = "⚠ 更新间隔设置失败：" + (resp.error || "未知错误"); hint.className = "hint err"; }

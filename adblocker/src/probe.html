@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html lang="zh-CN" data-theme="auto">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="color-scheme" content="light dark" />
+  <title>AdShield 运行时诊断</title>
+  <script src="shared/theme.js"></script>
+  <link rel="stylesheet" href="probe.css" />
+</head>
+<body>
+  <header class="p-head">
+    <div class="brand">
+      <img src="../icons/icon32.png" class="logo" alt="" />
+      <h1>AdShield · 运行时诊断</h1>
+    </div>
+    <button class="btn" id="runBtn">重新采集</button>
+  </header>
+
+  <main class="p-main">
+    <div class="p-note">
+      采集当前浏览器的 DNR 运行时事实：动态规则上限、已用规则数、已启用规则集、
+      反馈 API 可用性。这些数值随 Chrome 版本变化，<b>以本页实测为准</b>，
+      不要引用记忆或旧文档里的数字。
+    </div>
+    <div id="status" class="p-status">正在采集…</div>
+    <pre id="out" class="p-out"></pre>
+    <div class="p-actions">
+      <button class="btn" id="copyBtn">复制 JSON</button>
+      <button class="btn" id="downloadBtn">下载 JSON</button>
+    </div>
+    <div class="p-tip">
+      把 JSON 交给命令行解读：<code>node tools/probe-dnr.mjs probe.json</code>
+    </div>
+  </main>
+
+  <script src="probe.js"></script>
+</body>
+</html>

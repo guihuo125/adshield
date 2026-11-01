@@ -1,4 +1,9 @@
 // AdShield MV3 service worker
+// 共享的 host 归一化工具（classic worker，用 importScripts 引入；MV3 不支持动态 import()）
+importScripts("shared/host.js");
+importScripts("shared/config.js");
+const { normalizeHost, anyHostMatches, normalizeHostList, isPausedUntil } = self.adshieldHost;
+
 const ALL_RULESETS = ["ads", "tracking", "annoyances", "url_clean", "malware"];
 const STATS_KEY = "adshield_stats";
 const SETTINGS_KEY = "adshield_settings";
@@ -16,23 +21,7 @@ let __statsLive = false;
 // 用户规则应用防抖定时器（合并短时间内的多次变更）
 let __userRulesApplyTimer = 0;
 
-const DEFAULT_SETTINGS = {
-  enabled: true,
-  disabledSites: [],
-  pausedUntil: {},
-  globalPausedUntil: 0,
-  rulesets: { ads: true, tracking: true, annoyances: true, url_clean: true, malware: true },
-  antiDetect: true,
-  assist: true,
-  showBadge: true,
-  theme: "auto",
-  notifyOnBlock: false,  // 拦截时是否发系统通知（默认关）
-  assistedSites: [],   // 浏览助手触发历史：[{ host, ts, until, reason }]
-  // 订阅更新
-  subscriptions: [],           // [{ id, name, url, enabled, lastUpdate, lastCount, lastError }]
-  subscriptionInterval: 24,    // 自动更新间隔（小时）；0 = 关闭
-  lastSubscriptionCheck: 0
-};
+const { DEFAULT_SETTINGS, MSG } = self.adshieldConfig;
 
 async function getSettings() {
   const store = await chrome.storage.local.get(SETTINGS_KEY);
@@ -144,9 +133,10 @@ const SITE_RULE_BASE = 200000;
 
 function activePausedSites(s) {
   const now = Date.now();
-  const list = new Set(s.disabledSites || []);
+  // 归一化后去重：example.com 与 www.example.com 是同一个站，不能占两条放行规则
+  const list = new Set(normalizeHostList(s.disabledSites || []));
   for (const [host, until] of Object.entries(s.pausedUntil || {})) {
-    if (until && until > now) list.add(host);
+    if (until && until > now) list.add(normalizeHost(host));
   }
   return Array.from(list);
 }
@@ -254,7 +244,13 @@ function isThirdPartyTracker(host) {
 /* ============ 静态规则集身份 ============
    manifest 里的规则集 id 是字符串，但 onRuleMatchedDebug 给的 rulesetId 是 Chrome 分配的
    数字，拿 "url_clean" 去比对永远不成立。静态规则的 ruleId 打包时就固定不变，用它认门最可靠：
-   ads=100 / tracking=1000 / annoyances=2000 / url_clean=3000~3028 / malware=4000。 */
+   ads=100 / tracking=1000 / annoyances=2000 / url_clean=3000~3028 / malware=4000。
+
+   这张区间表是静态规则 ruleId 的唯一真源：adblocker/rules/*.json 里每条规则的 id
+   必须落在对应区间内，否则分类统计会静默错归类 —— tools/check.mjs 会校验这一项。
+
+   另注：DNR 的 regexFilter 是全串匹配，必须自行加 ^...$ 锚定，
+   未锚定的正则永不命中但规则集照样编译成功 [LRN-20261031-002] */
 const STATIC_RULE_SETS = [
   { min: 100, max: 100, cat: "ads" },
   { min: 1000, max: 1000, cat: "tracking" },
@@ -332,10 +328,10 @@ async function updateBadgeForTab(tabId) {
     }
     const count = (stats.byPage || {})[host] || 0;
     // 判断是否被暂停：全局停用 / 永久白名单 / 临时暂停
-    const now = Date.now();
-    const pausedUntil = (s.pausedUntil || {})[host];
-    const isTemporarilyPaused = !!(pausedUntil && pausedUntil > now);
-    const isPaused = !s.enabled || s.disabledSites.includes(host) || isTemporarilyPaused;
+    // 白名单与临时暂停都用子域匹配（存 example.com 则 www.example.com 也算已暂停），
+    // 与网络层放行规则、元素隐藏层、弹窗显示保持同一判定基准
+    const isTemporarilyPaused = isPausedUntil(s.pausedUntil, host);
+    const isPaused = !s.enabled || anyHostMatches(host, s.disabledSites) || isTemporarilyPaused;
     const enabled = !isPaused;
 
     if (s.showBadge === false) {
@@ -482,6 +478,15 @@ async function applyUserRules(rules) {
     if (trimmed.startsWith("!")) continue;
     if (trimmed.startsWith("#") && !trimmed.startsWith("##")) continue;
 
+    // 本段 ID 只有 10000 个（USER_RULE_BASE ~ USER_RULE_BASE+9999）。
+    // 超出段的规则永远不会被上面的 removeRuleIds 命中 → 每保存一次留一批孤儿，
+    // 累积到 Chrome 动态规则总上限就会让 updateDynamicRules 整批失败，
+    // 结果是用户所有自定义规则一起失效。所以这里必须截断，并明确告知丢了哪些。
+    if (id >= USER_RULE_BASE + 10000) {
+      skipped.push({ line: trimmed, reason: "超出本段规则上限 10000 条，超出部分未应用" });
+      continue;
+    }
+
     const parsed = parseRuleLine(trimmed, id);
     if (parsed && parsed.skip) {
       skipped.push({ line: trimmed, reason: parsed.skip });
@@ -499,6 +504,18 @@ async function applyUserRules(rules) {
   if (addRules.length > budget) {
     const overflow = addRules.splice(budget);
     overflow.forEach(r => skipped.push({ line: r.condition.urlFilter || r.condition.requestDomains?.[0] || "?", reason: "超过 Chrome 动态规则总上限 " + MAX_DYNAMIC_RULES + " 条" }));
+  }
+
+  // 截断后一条不剩时**绝不能下发**。
+  // 原因：updateDynamicRules 是「先按 removeRuleIds 删、再按 addRules 加」的原子操作。
+  // 如果 addRules 为空却仍然下发，等于只删不加 —— 用户原有的自定义规则会被整段清空，
+  // 而用户什么都没做错（只是订阅太多把池子占满了）。
+  // 订阅路径 applySubscriptionText 也有同样的保护，这里保持一致。
+  if (addRules.length === 0 && rules.length > 0) {
+    const err = new Error("动态规则池已满，用户自定义规则未能应用（请停用部分订阅或减少规则量）");
+    err.code = "POOL_FULL";
+    console.log("[AdShield] 用户规则未下发（规则池已满，保留原有规则）:", err.message);
+    return { applied: 0, skipped: [...skipped, { line: "(全体)", reason: err.message }], cosmetic: 0 };
   }
 
   try {
@@ -807,6 +824,23 @@ async function applySubscriptionText(sub, text) {
   if (addRules.length === 0) {
     return { ok: false, error: "未解析出任何可用规则（可能拿到的是错误页，或格式不受支持）", skipped };
   }
+
+  // 全局预算：动态规则池是订阅、用户自定义、站点放行共用的一条池子，
+  // 单个订阅就能产出五千多条，订阅数一多就会撞上 Chrome 的总上限。
+  // 而 updateDynamicRules 是整批原子提交 —— 超限意味着这个订阅一条都上不去。
+  // 所以提交前必须按全局剩余额度截断，并把丢掉的数量回传给用户。
+  const usedBefore = existing.length - removeRuleIds.length;
+  const budget = Math.max(0, MAX_DYNAMIC_RULES - usedBefore - 50);
+  if (addRules.length > budget) {
+    const dropped = addRules.splice(budget);
+    skipped += dropped.length;
+    console.log("[AdShield] 订阅规则超出动态规则总上限，丢弃", dropped.length, "条（上限", MAX_DYNAMIC_RULES, "）");
+  }
+  // 截断后可能一条不剩，同样不能下发（否则会清空该订阅原有规则）
+  if (addRules.length === 0) {
+    return { ok: false, error: "动态规则池已满，本订阅的规则未能应用（请停用其它订阅或减少规则量）", skipped };
+  }
+
   try {
     await chrome.declarativeNetRequest.updateDynamicRules({ removeRuleIds, addRules });
     return {
@@ -914,14 +948,14 @@ async function updateAllSubscriptions() {
 /* ============ 消息处理 ============ */
 function handleOtherMessage(msg, sender, sendResponse) {
   // 最快路径：ping 立即响应（保活 SW，避免冷启动）
-  if (msg && msg.type === "ping") {
+  if (msg && msg.type === MSG.PING) {
     sendResponse({ ok: true, ts: Date.now() });
     return;
   }
   (async () => {
     try {
       const s = await getSettings();
-      if (msg && msg.type === "getState") {
+      if (msg && msg.type === MSG.GET_STATE) {
         const tab = msg.tabId ? await chrome.tabs.get(msg.tabId).catch(() => null) : null;
         let siteHost = "";
         if (tab && tab.url) {
@@ -937,35 +971,35 @@ function handleOtherMessage(msg, sender, sendResponse) {
         sendResponse({
           settings: s,
           siteHost,
-          siteDisabled: s.disabledSites.includes(siteHost),
+          siteDisabled: anyHostMatches(siteHost, s.disabledSites),
           total: stats.total || 0,
           siteCount: (stats.byPage || {})[siteHost] || 0
         });
-      } else if (msg && msg.type === "toggleGlobal") {
+      } else if (msg && msg.type === MSG.TOGGLE_GLOBAL) {
         s.enabled = !!msg.value;
         await chrome.storage.local.set({ [SETTINGS_KEY]: s });
         await syncRulesets();
         sendResponse({ ok: true, settings: s });
-      } else if (msg && msg.type === "toggleSite") {
-        const host = msg.host;
+      } else if (msg && msg.type === MSG.TOGGLE_SITE) {
+        const host = normalizeHost(msg.host);   // 写入统一用归一化形式
         if (host) {
-          const set = new Set(s.disabledSites);
+          const set = new Set(normalizeHostList(s.disabledSites));
           if (msg.value) set.add(host);
           else set.delete(host);
           s.disabledSites = Array.from(set);
           await chrome.storage.local.set({ [SETTINGS_KEY]: s });
         }
         sendResponse({ ok: true, settings: s });
-      } else if (msg && msg.type === "toggleRuleset") {
+      } else if (msg && msg.type === MSG.TOGGLE_RULESET) {
         s.rulesets[msg.id] = !!msg.value;
         await chrome.storage.local.set({ [SETTINGS_KEY]: s });
         await syncRulesets();
         sendResponse({ ok: true, settings: s });
-      } else if (msg && msg.type === "setFeature") {
+      } else if (msg && msg.type === MSG.SET_FEATURE) {
         s[msg.key] = !!msg.value;
         await chrome.storage.local.set({ [SETTINGS_KEY]: s });
         sendResponse({ ok: true, settings: s });
-      } else if (msg && msg.type === "getStats") {
+      } else if (msg && msg.type === MSG.GET_STATS) {
         // 若内存缓冲存在，直接返回（实时）；否则从 storage 读
         if (__statsBuffer) {
           sendResponse(Object.assign({}, __statsBuffer, { live: __statsLive }));
@@ -976,15 +1010,54 @@ function handleOtherMessage(msg, sender, sendResponse) {
           __statsBuffer = stats;
           sendResponse(Object.assign({}, stats, { live: __statsLive }));
         }
-      } else if (msg && msg.type === "resetStats") {
+      } else if (msg && msg.type === MSG.GET_TAB_STATS) {
+        // 正式安装版的按标签页统计：靠 activeTab 授权（用户打开弹窗时授予）
+        const r = await getTabMatchStats(msg.tabId);
+        // 回写到统计缓冲，让设置页的「拦截统计」页也能读到正式版数据。
+        // 为什么必须在这里回写：设置页是自己打开的扩展页，**拿不到 activeTab 授权**
+        // （activeTab 只在用户点击扩展图标/右键菜单/快捷键时授予），
+        // 所以设置页无法自己查 getMatchedRules —— 只能靠弹窗查到的数据回写共享。
+        // 之前只回传给弹窗、不回写缓冲，导致正式版设置页三项数字永远是 0，
+        // 而文案却写着「可用」——这是 2.9.97 修复的一个回归。
+        if (r && r.ok && msg.tabId != null) {
+          try {
+            const stats = await loadStatsBuffer();
+            const host = await hostForTab(msg.tabId);
+            if (host) {
+              // 用 max 而不是累加：getMatchedRules 返回的是该标签页**累计**命中列表，
+              // 同一个 tab 查两次会拿到同一批数据。累加会让数字翻倍。
+              // max 天然去重，且标签页刷新后命中数归零时也能正确回落。
+              stats.total = Math.max(stats.total || 0, r.total || 0);
+              stats.byPage[host] = Math.max(stats.byPage[host] || 0, r.total || 0);
+              if (!stats.byCategory[host]) {
+                stats.byCategory[host] = { ads: 0, tracking: 0, annoyances: 0, url_clean: 0, malware: 0 };
+              }
+              for (const k of Object.keys(r.byCategory || {})) {
+                stats.byCategory[host][k] = Math.max(stats.byCategory[host][k] || 0, r.byCategory[k]);
+              }
+              scheduleFlush();
+            }
+          } catch (e) { /* 回写失败不影响弹窗显示 */ }
+        }
+        sendResponse(r);
+      } else if (msg && msg.type === MSG.RESET_STATS) {
         const blank = { total: 0, byPage: {}, byBlocked: {}, byCategory: {}, byDate: {}, byHour: {}, recentLogs: [] };
         __statsBuffer = blank;   // 关键：同时清内存
         await chrome.storage.local.set({ [STATS_KEY]: blank });
         sendResponse({ ok: true });
-      } else if (msg && msg.type === "getUserRules") {
+      } else if (msg && msg.type === MSG.CLEAR_LOGS) {
+        // 只清日志，不动总数/分类统计——与「重置统计」语义区分开。
+        // 必须在这里清：background 有一份内存缓冲（__statsBuffer），
+        // 页面侧直接写 storage 的话，内存缓冲没动，下次 flush 会把旧日志写回去，
+        // 用户点了「清空」却发现日志又回来了。
+        const stats = await loadStatsBuffer();
+        stats.recentLogs = [];
+        await chrome.storage.local.set({ [STATS_KEY]: stats });
+        sendResponse({ ok: true });
+      } else if (msg && msg.type === MSG.GET_USER_RULES) {
         const store = await chrome.storage.local.get("adshield_user_rules");
         sendResponse(store.adshield_user_rules || []);
-      } else if (msg && msg.type === "saveUserRules") {
+      } else if (msg && msg.type === MSG.SAVE_USER_RULES) {
         // 值变化时由 storage.onChanged 统一触发应用（避免双写导致 updateDynamicRules 竞态）；
         // 值未变化时 onChanged 不会触发，手动应用一次保证幂等（用户强制重刷场景）。
         const next = msg.rules || [];
@@ -1001,9 +1074,9 @@ function handleOtherMessage(msg, sender, sendResponse) {
           await chrome.storage.local.set({ adshield_user_rules_result: { ts: Date.now(), ok: true, result } });
           sendResponse({ ok: true, result });
         }
-      } else if (msg && msg.type === "getSubscriptions") {
+      } else if (msg && msg.type === MSG.GET_SUBSCRIPTIONS) {
         sendResponse({ ok: true, subscriptions: s.subscriptions || [], interval: typeof s.subscriptionInterval === "number" ? s.subscriptionInterval : 24, lastCheck: s.lastSubscriptionCheck || 0 });
-      } else if (msg && msg.type === "saveSubscription") {
+      } else if (msg && msg.type === MSG.SAVE_SUBSCRIPTION) {
         const incoming = msg.subscription || {};
 
         // ===== 阶段 1：先 fetch（不排队，多个订阅可并发拉取） =====
@@ -1106,7 +1179,7 @@ function handleOtherMessage(msg, sender, sendResponse) {
             sendResponse({ ok: true, subscriptions: subs });
           }
         });
-      } else if (msg && msg.type === "saveSubscriptionsBatch") {
+      } else if (msg && msg.type === MSG.SAVE_SUBSCRIPTIONS_BATCH) {
         const incoming = msg.subscriptions || [];
         if (!incoming.length) {
           sendResponse({ ok: true, results: [] });
@@ -1174,7 +1247,7 @@ function handleOtherMessage(msg, sender, sendResponse) {
 
           sendResponse({ ok: true, results });
         });
-      } else if (msg && msg.type === "restoreDefaultSubscriptions") {
+      } else if (msg && msg.type === MSG.RESTORE_DEFAULT_SUBSCRIPTIONS) {
         // 恢复默认订阅（不重复已有的）
         await enqueueSubscription(async () => {
           const s = await getSettings();
@@ -1223,7 +1296,7 @@ function handleOtherMessage(msg, sender, sendResponse) {
           }
           sendResponse({ ok: true, added });
         });
-      } else if (msg && msg.type === "checkSubscriptionUpdates") {
+      } else if (msg && msg.type === MSG.CHECK_SUBSCRIPTION_UPDATES) {
         // 轻量检查：只拉取 + 对比 hash，不应用规则
         const s = await getSettings();
         const subs = s.subscriptions || [];
@@ -1254,7 +1327,7 @@ function handleOtherMessage(msg, sender, sendResponse) {
         }
         console.log("[AdShield] 检查订阅更新：", changed, "/", enabledSubs.length, "个有变化");
         sendResponse({ ok: true, checked: enabledSubs.length, changed });
-      } else if (msg && msg.type === "clearSubscriptionUpdateFlag") {
+      } else if (msg && msg.type === MSG.CLEAR_SUBSCRIPTION_UPDATE_FLAG) {
         const s = await getSettings();
         const subs = s.subscriptions || [];
         if (msg.id) {
@@ -1271,7 +1344,7 @@ function handleOtherMessage(msg, sender, sendResponse) {
         s.subscriptions = subs;
         await chrome.storage.local.set({ [SETTINGS_KEY]: s });
         sendResponse({ ok: true });
-      } else if (msg && msg.type === "removeSubscription") {
+      } else if (msg && msg.type === MSG.REMOVE_SUBSCRIPTION) {
         const subs = (s.subscriptions || []).filter(x => x.id !== msg.id);
         s.subscriptions = subs;
         await chrome.storage.local.set({ [SETTINGS_KEY]: s });
@@ -1288,11 +1361,11 @@ function handleOtherMessage(msg, sender, sendResponse) {
           }
         });
         sendResponse({ ok: true, subscriptions: subs });
-      } else if (msg && msg.type === "updateAllSubscriptions") {
+      } else if (msg && msg.type === MSG.UPDATE_ALL_SUBSCRIPTIONS) {
         const result = await updateAllSubscriptions();
         const s2 = await getSettings();
         sendResponse({ ok: true, result, subscriptions: s2.subscriptions || [] });
-      } else if (msg && msg.type === "setSubscriptionInterval") {
+      } else if (msg && msg.type === MSG.SET_SUBSCRIPTION_INTERVAL) {
         s.subscriptionInterval = Math.max(0, parseInt(msg.hours, 10) || 0);
         await chrome.storage.local.set({ [SETTINGS_KEY]: s });
         sendResponse({ ok: true, interval: s.subscriptionInterval });
@@ -1308,7 +1381,7 @@ function handleOtherMessage(msg, sender, sendResponse) {
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // 浏览助手：自动暂停该站点
-  if (msg && msg.type === "assistDetected" && msg.host) {
+  if (msg && msg.type === MSG.ASSIST_DETECTED && msg.host) {
     // msg.host 必须与发送方所在标签页一致，否则页面可伪造 host 暂停任意站点
     const senderHost = (() => {
       if (!sender || !sender.tab || !sender.tab.url) return "";
@@ -1323,7 +1396,7 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
       try {
         const s = await getSettings();
         if (s.assist === false) { sendResponse({ ok: false, reason: "assist-disabled" }); return; }
-        if (s.disabledSites.includes(msg.host)) { sendResponse({ ok: false, reason: "already-paused" }); return; }
+        if (anyHostMatches(msg.host, s.disabledSites)) { sendResponse({ ok: false, reason: "already-paused" }); return; }
         // 已在协助列表里且未过期 → 不重复暂停
         const existing = s.pausedUntil[msg.host];
         if (existing && existing > Date.now()) {
@@ -1331,13 +1404,16 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
           return;
         }
         // 暂时暂停 1 小时（浏览助手触发时）
+        // host 来自 content script 的 location.hostname（可能带 www），
+        // 写入前归一化，保证存储形式与设置页/弹窗写入的一致
         const until = Date.now() + 60 * 60 * 1000;
-        s.pausedUntil[msg.host] = until;
+        const assistHost = normalizeHost(msg.host);
+        s.pausedUntil[assistHost] = until;
         // 记录到协助历史（用于 UI 显示）
         if (!Array.isArray(s.assistedSites)) s.assistedSites = [];
-        s.assistedSites = s.assistedSites.filter(x => x.host !== msg.host);
+        s.assistedSites = s.assistedSites.filter(x => x.host !== assistHost);
         s.assistedSites.push({
-          host: msg.host,
+          host: assistHost,
           ts: Date.now(),
           until: until,
           reason: msg.reason || "detected"
@@ -1369,9 +1445,9 @@ chrome.commands.onCommand.addListener(async (command) => {
   } else if (command === "toggle-site") {
     const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
     if (!tab || !tab.url || !/^https?:/.test(tab.url)) return;
-    const host = new URL(tab.url).hostname;
+    const host = normalizeHost(new URL(tab.url).hostname);
     const s = await getSettings();
-    const set = new Set(s.disabledSites || []);
+    const set = new Set(normalizeHostList(s.disabledSites || []));
     if (set.has(host)) {
       set.delete(host);
       delete s.pausedUntil[host];
@@ -1413,18 +1489,18 @@ function createMenus() {
 
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (!tab || !tab.url || !/^https?:/.test(tab.url)) return;
-  const host = new URL(tab.url).hostname;
+  const host = normalizeHost(new URL(tab.url).hostname);
 
   if (info.menuItemId === MENU_ID_PAUSE) {
     const s = await getSettings();
-    const set = new Set(s.disabledSites || []);
+    const set = new Set(normalizeHostList(s.disabledSites || []));
     set.add(host);
     s.disabledSites = Array.from(set);
     await chrome.storage.local.set({ [SETTINGS_KEY]: s });
     console.log("[AdShield] 右键菜单：暂停", host);
   } else if (info.menuItemId === MENU_ID_RESUME) {
     const s = await getSettings();
-    const set = new Set(s.disabledSites || []);
+    const set = new Set(normalizeHostList(s.disabledSites || []));
     set.delete(host);
     s.disabledSites = Array.from(set);
     delete s.pausedUntil[host];
@@ -1458,10 +1534,6 @@ async function scheduleSubscriptionCheck() {
 }
 
 chrome.alarms.onAlarm.addListener(async (a) => {
-  if (a.name === MATCH_POLL_ALARM) {
-    await pollMatchedRules();
-    return;
-  }
   if (a.name === "adshield-first-sub-fetch") {
     await chrome.alarms.clear("adshield-first-sub-fetch");
     updateAllSubscriptions().catch((e) => {
@@ -1753,77 +1825,71 @@ if (chrome.declarativeNetRequest.onRuleMatchedDebug) {
   console.log("[AdShield] onRuleMatchedDebug 不可用（需开发者模式加载）");
 }
 
-/* ============ 正式安装版的请求级统计 ============ */
-// onRuleMatchedDebug 只存在于「开发者模式加载的未打包扩展」里，正式安装版没有这个事件，
-// 所以正式版的统计改走 getMatchedRules()：它对持有 declarativeNetRequestFeedback 权限的扩展
-// 同样可用（实测 Chrome 156），返回命中过的规则列表（带命中时间戳和 tabId）。
-// 配额：20 次 / 10 分钟（MAX_GETMATCHEDRULES_CALLS_PER_INTERVAL / GETMATCHEDRULES_QUOTA_INTERVAL），
-// 这里 60 秒一次，远低于配额。
+/* ============ 正式安装版的请求级统计 ============
+   事实依据（Chrome 官方文档，developer.chrome.com 的 permissions-list）：
+     "declarativeNetRequestFeedback" —— "This permission is for use with unpacked
+     extensions and is ignored for extensions installed from the Chrome Web Store."
+   也就是说这个权限在正式安装版是「被忽略」的，onRuleMatchedDebug 与
+   getMatchedRules() 都拿不到数据。此前代码注释写的「实测 Chrome 156 正式版可用」
+   与官方文档矛盾——那个「实测」多半是在未打包模式下做的。
+
+   正式版可行的路径是 activeTab：
+     getMatchedRules(filter) 的文档写明："This method is only available to
+     extensions with the declarativeNetRequestFeedback permission or having the
+     activeTab permission granted for the tabId specified in filter."
+   用户点击扩展图标（打开 popup）会授予 activeTab，此时按 tabId 查询就能拿到
+   该标签页命中过的规则（ruleId + timeStamp + tabId）。
+
+   所以正式版改为「用户打开弹窗时按当前标签页取数」，而不是后台定时轮询：
+   - 轮询在正式版必然拿不到数据，却每分钟唤醒一次 SW，白耗电；
+   - 按需查询的配额是 20 次 / 10 分钟，用户开弹窗的频率远低于此。
+
+   这个权限限制与 LRN-20261031-001 是同类问题：凭记忆断言 Chrome API 的行为。
+   代码注释里原先写的「实测 Chrome 156 正式版可用」多半是在未打包模式下测的。
+
+   限制要说清楚：getMatchedRules() 不返回被拦截请求的 URL，
+   所以正式版只能给到「按规则分类的计数」，给不了被拦域名与逐条日志。 */
 const MATCH_POLL_ALARM = "adshield-match-poll";
-const MATCH_POLL_MINUTES = 1;
-const MATCH_TS_KEY = "adshield_match_poll_ts";
 
-async function pollMatchedRules() {
-  // 开发模式下 onRuleMatchedDebug 给的数据更全（带 URL、分类、时间线），不重复计
-  if (__statsLive) return;
-  if (!chrome.declarativeNetRequest || !chrome.declarativeNetRequest.getMatchedRules) return;
-
-  let res;
+/**
+ * 正式安装版：按标签页取命中计数。
+ * @param {number} tabId
+ * @returns {Promise<{ok:boolean, total?:number, byCategory?:object, reason?:string}>}
+ */
+/** 取某个标签页的主机名（归一化形式），拿不到返回空串 */
+async function hostForTab(tabId) {
   try {
-    res = await chrome.declarativeNetRequest.getMatchedRules();
+    const tab = await chrome.tabs.get(tabId);
+    if (!tab || !tab.url) return "";
+    return normalizeHost(new URL(tab.url).hostname);
   } catch (e) {
-    return;   // 配额用完 / 权限不足：跳过这一轮，不刷错误日志
+    return "";
   }
-  const infos = (res && res.rulesMatchedInfo) || [];
-  const now = Date.now();
-  // 水位线放 storage：MV3 的 Service Worker 空闲就会被挂起，内存变量一重启就丢，
-  // 丢一次就会漏算或重算那一分钟的命中。
-  const store = await chrome.storage.local.get(MATCH_TS_KEY);
-  const since = store[MATCH_TS_KEY] || (now - MATCH_POLL_MINUTES * 60 * 1000);
-  await chrome.storage.local.set({ [MATCH_TS_KEY]: now });
-  // 只算本轮之后新命中的：老的条目会因为「超过 5 分钟且没关联到文档」被 Chrome 丢掉，
-  // 直接取总数会随保留窗口忽上忽下。
-  const fresh = infos.filter(i => i && i.timeStamp && i.timeStamp > since);
-  if (!fresh.length) return;
-
-  // 按 tabId 归到站点；标签已关掉的拿不到 URL，只计总数
-  const tabIds = Array.from(new Set(fresh.map(i => i.tabId).filter(id => id != null && id >= 0)));
-  const tabHosts = {};
-  for (const id of tabIds) {
-    try {
-      const tab = await chrome.tabs.get(id);
-      if (tab && tab.url) { try { tabHosts[id] = new URL(tab.url).hostname; } catch (e) {} }
-    } catch (e) {}
-  }
-
-  const stats = await loadStatsBuffer();
-  let total = 0;
-  for (const info of fresh) {
-    const ruleId = info.rule && info.rule.ruleId;
-    const cat = staticRuleSetCat(ruleId) || "ads";   // 动态规则（订阅/自定义）归到广告
-    const host = tabHosts[info.tabId] || "";
-    // url_clean 是重定向不是拦截，不计入总数
-    if (cat !== "url_clean") total++;
-    const key = host || "(全局)";
-    if (!stats.byCategory[key]) {
-      stats.byCategory[key] = { ads: 0, tracking: 0, annoyances: 0, url_clean: 0, malware: 0 };
-    }
-    stats.byCategory[key][cat] = (stats.byCategory[key][cat] || 0) + 1;
-    if (host) stats.byPage[host] = (stats.byPage[host] || 0) + 1;
-  }
-  stats.total = (stats.total || 0) + total;
-  scheduleFlush();
 }
 
-async function ensureMatchPollAlarm() {
-  // 不靠「onRuleMatchedDebug 这个 API 存不存在」来判断是不是开发模式：
-  // 打包版里它可能存在但永不触发，那样就永远不会去建轮询，统计就一直是空的。
-  // 只在调试事件真的来过（__statsLive）时，pollMatchedRules 自己会跳过。
+async function getTabMatchStats(tabId) {
+  if (tabId == null || tabId < 0) return { ok: false, reason: "无标签页" };
+  if (!chrome.declarativeNetRequest || !chrome.declarativeNetRequest.getMatchedRules) {
+    return { ok: false, reason: "当前浏览器不支持 getMatchedRules" };
+  }
+  let res;
   try {
-    const cur = await chrome.alarms.get(MATCH_POLL_ALARM);
-    if (cur && cur.periodInMinutes === MATCH_POLL_MINUTES) return;
-  } catch (e) {}
-  chrome.alarms.create(MATCH_POLL_ALARM, { periodInMinutes: MATCH_POLL_MINUTES });
+    res = await chrome.declarativeNetRequest.getMatchedRules({ tabId });
+  } catch (e) {
+    return { ok: false, reason: (e && e.message) || String(e) };
+  }
+  const infos = (res && res.rulesMatchedInfo) || [];
+  const byCategory = {};
+  let total = 0;
+  for (const info of infos) {
+    const ruleId = info.rule && info.rule.ruleId;
+    const cat = staticRuleSetCat(ruleId) || "ads";   // 动态规则（订阅/自定义）归到广告
+    if (!byCategory[cat]) byCategory[cat] = 0;
+    byCategory[cat]++;
+    // url_clean 是重定向不是拦截，不计入总数（与 onRuleMatchedDebug 口径一致）
+    if (cat !== "url_clean") total++;
+  }
+  return { ok: true, total, byCategory, count: infos.length };
 }
 
 // 标签关闭时清理通知状态
@@ -1839,8 +1905,6 @@ chrome.tabs.onRemoved.addListener((tabId) => {
   } catch (e) {
     console.log("[AdShield] 启动应用用户规则失败:", e);
   }
-  // 正式安装版的统计轮询（开发模式跳过）
-  try { await ensureMatchPollAlarm(); } catch (e) {}
 })();
 
 /* ============ 清理孤儿订阅规则 ============ */

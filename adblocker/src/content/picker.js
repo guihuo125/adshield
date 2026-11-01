@@ -209,9 +209,8 @@
     });
   }
 
-  function escapeHtml(s) {
-    return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-  }
+  // HTML 转义统一走 shared/dom.js（manifest 已把 dom.js 注入到本 content script）
+  const escapeHtml = (s) => globalThis.adshieldDom.escapeHtml(s);
 
   function ensureOverlay() {
     if (overlay) return;
@@ -260,7 +259,10 @@
       const store = await chrome.storage.local.get("adshield_user_rules");
       const rules = store.adshield_user_rules || [];
       if (!rules.includes(fullRule)) rules.push(fullRule);
-      await chrome.storage.local.set({ "adshield_user_rules": rules });
+      // 规则本体只由 background 写（saveUserRules 内部会 set 这个键）。
+      // 这里再 set 一次会触发 storage.onChanged → applyUserRules，
+      // 而 saveUserRules 也会 apply 一次 —— 同一批规则被全量重写两遍，
+      // 两次之间用户若又改了规则，后一次会覆盖前一次的结果。
       await chrome.runtime.sendMessage({ type: "saveUserRules", rules });
       console.log("[AdShield 拾取器] 已添加规则:", fullRule);
     } catch (err) {

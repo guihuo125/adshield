@@ -3,6 +3,11 @@
 > 面向下一个接手这个项目的 AI / 开发者。
 > 文档里的每个数字都是 **2026-11-01 在 Chrome 156.0.8078.74 上实测出来的**，不是从记忆或旧文档抄的。
 > 凡是「逻辑推演」「未实测」的地方都单独标了，不要当成事实继承。
+>
+> **2026-11-01 第二轮（2.9.97）更新**：新增 §6.6 上线门禁、§6.7 改动手册、§6.8 模块职责边界、
+> §2 UI 层速查；已知坑从 15 条加到 24 条；测试从 0 增至 149 项（`npm run verify`）。
+> 同轮修掉 3 个真实缺陷（解构漏项 ×2、池满清空用户规则 ×1）并补了 2 个 P1（云端空 rulesets 覆盖、
+> 设置页正式版统计无数据）。逐条记录见 §5 与 §7.2b。
 
 ---
 
@@ -36,19 +41,33 @@ adblocker/
   _locales/{zh_CN,en}/messages.json   只有 extensionName / extensionDescription 两个键
   icons/                   icon16/32/48/128
   src/
-    background.js          1879 行。Service Worker：规则同步、订阅拉取、统计、消息处理
-    popup.{html,css,js}   666 行 js。工具栏弹窗
-    options.{html,css,js} 1981 行 js + 48KB html。设置页（6 个页签）
-    logger.{html,css,js}  146 行。请求级明细日志
+    background.js          1894 行。Service Worker：规则同步、订阅拉取、统计、消息处理
+    popup.{html,css,js}   699 行 js。工具栏弹窗
+    options.{html,css,js} 1965 行 js + 48KB html。设置页（6 个页签）
+    logger.{html,css,js}  134 行。请求级明细日志
     content/
-      cosmetic.js          439 行。元素隐藏引擎 + 浏览助手（反拦截检测）
+      cosmetic.js          444 行。元素隐藏引擎 + 浏览助手（反拦截检测）
       anti-detect.js       97 行。隔离世界部分：DOM 诱饵 + 与 MAIN world 握手
       anti-detect-main.js  97 行。**MAIN world**：全局变量伪装 + 真实检测
-      picker.js            301 行。元素拾取器（自带一套模态框样式）
+      picker.js            303 行。元素拾取器（自带一套模态框样式）
     shared/
-      auth.js              2782 行。账号系统 + Supabase 云同步（**最大的单文件**）
-      modal.js             143 行。自定义 showConfirm / showAlert
+      auth.js              2467 行。账号系统 + Supabase 云同步（**最大的单文件**）
+      modal.js             258 行。showConfirm / showAlert / showFormDialog
+      host.js              96 行。host 归一化（**唯一真源**）
+      dom.js               57 行。HTML 转义 + 文件下载（**唯一真源**）
+      config.js            96 行。默认设置 + 规则集定义 + 消息协议（**唯一真源**）
+      validate.js          267 行。云端数据校验纯函数（**唯一真源**，可单测）
       theme.js / nav-init.js
+tools/                    开发工具，**不进扩展包**
+  check.mjs               静态校验：regexFilter 锚定 / 规则 id 区间 / DOM 契约 / 单一真源
+  test-host.mjs           27 项：host 归一化与三层判定一致性
+  test-rules.mjs          13 项：用户规则段位上限 / 订阅全局预算
+  test-validate.mjs       100 项：云端数据净化与校验（安全边界）
+  probe-cdp.mjs           运行时诊断采集（自启 Chrome + CDP，零人工）
+  probe-dnr.mjs           诊断结果解读
+  verify-extension.js     真机验证（仓库侧，6 项）
+  verify-round3-fixes.js  第三轮修复的真机验证（仓库侧，22 项）
+package.json              npm run check / test / verify / probe
 ```
 
 ### 静态规则的 ruleId 段（`background.js: STATIC_RULE_SETS`）
@@ -62,6 +81,44 @@ adblocker/
 | malware | 4000 |
 
 **分类统计靠这个段位反推**，不是靠 URL 特征猜。改规则集的 id 段 = 改坏统计。
+
+### UI 层速查（改界面看这里）
+
+四个界面的职责、对应文件、状态来源：
+
+| 界面 | 文件 | 解决什么问题 | 状态来源 |
+|---|---|---|---|
+| 设置页 | `options.{html,css,js}` | 开关、规则、订阅、统计、账号 | `adshield_settings` / background 消息 |
+| 工具栏弹窗 | `popup.{html,css,js}` | 当前站状态、暂停菜单、快速统计 | `getState` / `getStats` / `getTabStats` |
+| 详细日志 | `logger.{html,css,js}` | 逐条拦截记录 | `getStats` 的 `recentLogs` |
+| 运行时诊断 | `probe.{html,css,js}` | 采集 DNR 运行时事实 | 直接调 `chrome.declarativeNetRequest` |
+
+**改一个 UI 元素要动的地方**：
+
+| 场景 | 动哪里 | 注意 |
+|---|---|---|
+| 加一个设置开关 | `options.html` 加控件 → `options.js` 加读写 → `shared/config.js` 的 `DEFAULT_SETTINGS` | 三处都要动。`DEFAULT_SETTINGS` 是唯一真源，`options.js` 与 `popup.js` 共用 |
+| 改弹窗上的显示 | `popup.js` 的 `render()` → `popup.html` 对应 DOM | `render()` 每 2 秒跑一次，别在里面做重活 |
+| 加一个设置页板 | `options.html` 加 `.nav-item` + `.panel` → `shared/nav-init.js` 会自动切 `data-route` | `nav-init.js` 读 `location.hash`，首屏就会应用 |
+| 改主题色 | CSS 变量：`options.css` / `popup.css` / `logger.css` 各自定义了一套 `--bg` / `--text-*` | **三份 CSS 各自定义了变量，没有共用**，改主题色要同步改三处 |
+| 加日志页的一列 | `logger.js` 的 `render()`（拼 `tr.innerHTML`）+ `logger.css` | 转义走 `shared/dom.js` 的 `escapeHtml` |
+| 加弹窗 | 用 `shared/modal.js` 的 `showConfirm` / `showAlert` / `showFormDialog`，**不要自己写 overlay** | `auth.js` 曾有 6 处手写 overlay，现已全部收敛 |
+
+**样式与主题机制**：
+
+- `shared/theme.js` 在页面 `<head>` 里同步执行，读 `adshield_settings.theme`，
+  给 `<html>` 设 `data-theme="light|dark"`，并同步 `<meta name="color-scheme">`。
+- 各 CSS 用 `html[data-theme="dark"] { --bg: ...; }` 覆盖变量。
+- `shared/modal.css` 是弹窗样式，四个页面都引了它；页面自己的 CSS 只管自己的布局。
+
+**已知的前端层坑**：
+
+| 坑 | 位置 | 说明 |
+|---|---|---|
+| **设置页统计在正式版拿不到数据** | `options.js` 的 `renderReport()` | 已修（2.9.97）：正式版由弹窗查到的数据**回写**统计缓冲，设置页读共享缓冲。设置页自己拿不到 activeTab（Chrome 只在用户调用扩展时授予），所以不能自己查 |
+| 硬编码色值散落 | 三个 CSS 文件 | 改主题色要同步改三处变量表 |
+| `options.css` 2641 行 | `options.css` | 样式与 HTML 强耦合，改动回归面大 |
+| `innerHTML` 拼接 | `options.js` / `logger.js` / `popup.js` | 用户数据必须走 `escapeHtml`；服务端返回的正文一律 `textContent` |
 
 ---
 
@@ -118,38 +175,26 @@ content script  --chrome.runtime.sendMessage-->  background.js
 
 | | 开发模式（未打包） | 正式安装版 |
 |---|---|---|
-| 数据源 | `chrome.declarativeNetRequest.onRuleMatchedDebug` | `chrome.declarativeNetRequest.getMatchedRules()` |
+| 数据源 | `chrome.declarativeNetRequest.onRuleMatchedDebug` | `chrome.declarativeNetRequest.getMatchedRules({tabId})` |
 | 粒度 | 每条请求：URL、分类、时间线 | 每条命中：ruleId、tabId、timeStamp（**没有 URL**） |
-| 触发 | 事件驱动 | 每分钟轮询一次（alarm `adshield-match-poll`） |
-| 代码 | `background.js` 的 `onRuleMatchedDebug` 分支 | `background.js` 的 `pollMatchedRules()` |
+| 触发 | 事件驱动 | **按需**：用户打开弹窗时查一次当前标签页 |
+| 代码 | `background.js` 的 `onRuleMatchedDebug` 分支 | `background.js` 的 `getTabMatchStats()` |
 
-正式版轮询的关键设计：
-- **水位线存 storage**（`adshield_match_poll_ts`），不放内存 —— MV3 的 Service Worker 空闲就被挂起，内存变量一重启就丢，会漏算或重算。
-- 按 `timeStamp > 水位线` 筛新增。Chrome 会丢掉「超过 5 分钟且没关联到文档」的旧条目，直接取总数会忽上忽下。
-- `__statsLive` 为 true（说明调试事件真的来过）时跳过轮询，避免开发模式重复计数。
-
-### 3.4b 分类口径（弹窗圆环与数字为什么以前会对不上）
-
-三个数走三条路，改任何一个都要一起看：
-
-| 显示位置 | 取数 | 含 URL 参数清理吗 |
-|---|---|---|
-| 圆环中心、「本站已拦截」 | `stats.byPage[host]` | 不含（清理是重定向，不算拦截） |
-| 圆环分段 | `stats.byCategory[host]` 去掉 `url_clean` | 不含（与中心同口径，2.9.96 后修齐） |
-| 分类芯片 | `stats.byCategory[host]` 全量 | 含，URL 那一档只在芯片里出现 |
-
-代码：`popup.js` 的 `render()`（造 `wheelCats` 时 `delete wheelCats.url_clean`）、`background.js` 的 `onRuleMatchedDebug` 分支。
-
-动态规则（订阅、自定义）没有规则集身份，只能按 URL 猜分类，所以同一个域名可能一会儿算追踪一会儿算广告
-（实测样本：`galileotelemetry.tencent.com/collect` 判追踪，同域名的 `/aegiscontrol/whitelist` 判广告）。
-现在两道兜底：
-
-1. `classifyRule` 先看**域名级**强特征（telemetry / beacon / gatherer / metrika / tdid / guance 等子串），
-   再看路径特征；路径边界允许 `.`，所以 `.../common/analytics.js` 能判成追踪（以前要求后面跟 `/ ?` 或结尾，判成广告）。
-2. `stats.byHostCat`（上限 800 个域名）记住每个被拦域名第一次判定的类别，之后同域名一律沿用，不再随路径漂移。
-
-`stats.byHostCat` 是累计数据的一部分，跟着 stats 一起落盘；`resetStats` 会一并清掉。
-**历史计数不会被追溯改写**：已经记成「广告」的那 22 条还在那儿，要干净数字得点设置页的「重置统计」。
+正式版按需查询的关键设计（**2.9.97 改版**）：
+- **不再后台轮询。** 旧实现每分钟起一个 alarm 调 `getMatchedRules()`，
+  但 `declarativeNetRequestFeedback` 权限对商店安装版被忽略 —— 正式版这个调用**必然失败**，
+  等于每分钟白唤醒一次 Service Worker。已删除。
+- **走 `activeTab`。** `getMatchedRules(filter)` 的文档写明：
+  「适用于持 `declarativeNetRequestFeedback` 权限的扩展，**或对 filter 里 tabId 有 `activeTab` 授权**的扩展」。
+  用户点扩展图标打开弹窗时授予 activeTab，此时按 tabId 查就能拿到真实命中。
+- **配额限流**：`getMatchedRules` 是 20 次 / 10 分钟，而弹窗每 2 秒轮询一次。
+  弹窗侧做了 60 秒冷却 + 换标签页立即放行（`popup.js` 的 `__tabStatsAllowed`）。
+- **弹窗查到的数据回写统计缓冲**（`background.js` 的 `GET_TAB_STATS` 分支）：
+  设置页是自己打开的扩展页，**拿不到 activeTab**，无法自己查；
+  只能靠弹窗查到的数据回写共享缓冲，设置页读缓冲才有数。
+  用 `Math.max` 而非累加 —— `getMatchedRules` 返回的是该标签页**累计**命中，
+  累加会让同一个 tab 查两次就翻倍。
+- **仍拿不到**：被拦域名、趋势图（`getMatchedRules` 不返回 URL，这是 API 能力边界）。
 
 ### 3.5 账号与云同步（`shared/auth.js`）
 
@@ -267,30 +312,58 @@ pack.ps1 <版本号> [-ExpectedId <扩展ID>]
 | 13 | MV3 的 SW 会**频繁挂起** | 跨重启要保留的状态（水位线之类）必须存 storage，不能用模块级变量 |
 | 14 | 仓库目录 `D:\temp-adshield-repo` 和工作区要**手工同步** | 改完忘了同步 = 发出去的包和 git 历史不一致。打包前先跑一次全量哈希比对 |
 | 15 | 打包时把 `_metadata` 移到**源码目录之外** | 旧脚本把它改名成 `_metadata.bak-<时间戳>` 留在 `adblocker/` 里，Chrome 打包时连带收进 CRX：2.9.95 的 crx 有 46 个条目（15 个是垃圾），zip 却只有干净的 31 个。发布前必须分别验 zip 和 crx 载荷 |
-| 16 | 弹窗里「拦截数」有三个来源，改一个就要对齐另两个 | 中心数和「本站已拦截」走 `byPage`（不含参数清理），圆环分段和芯片走 `byCategory`（含）。以前圆环含清理、中心不含，用户看到的就是一行对不上的数字。见 §3.4b |
+| 16 | **删掉一条数据通路前，先查还有谁在用它的文案** | 2.9.96 删掉正式版的 `pollMatchedRules` 轮询后，正式版设置页的「累计拦截 / 访问过的站点 / 各类型占比」全成 0，**但 `options.html` 的提示文案还写着「可用」**。修法：要么给新通路补回写，要么改文案说清限制。**两者都要做**——文案是用户唯一的真相来源 |
+| 17 | **设置页拿不到 `activeTab`** | Chrome 只在用户**调用**扩展时（点图标 / 右键菜单 / 快捷键）授予 activeTab。扩展页面自己打开时没有这个授权，所以设置页**不能**自己查 `getMatchedRules({tabId})`。只能靠弹窗查到后回写共享缓冲 |
+| 18 | **`getMatchedRules` 返回的是累计值，回写要用 max 不是加法** | 同一个 tab 查两次拿到同一批数据，累加会让数字翻倍（实测 1 条 → 显示 2 条）。用 `Math.max` 天然去重 |
+| 19 | **`getAvailableConstants()` 在 Chrome 156 上不存在** | 常量是 `chrome.declarativeNetRequest` 对象上的静态属性（`MAX_NUMBER_OF_DYNAMIC_RULES` 等）。取常量要两种形态都试 |
+| 20 | **别用 `--load-extension`** | Chrome 137+ 官方品牌版已移除，`--disable-features=DisableLoadExtensionCommandLineSwitch` 在 142+ 也失效。改用 `--remote-debugging-pipe` + CDP `Extensions.loadUnpacked`。**pipe 方向是 Node 写 fd3、Chrome 从 fd4 读回**（与直觉相反），写反了表现为「SIGTERM + 零输出」这种没有线索的失败 |
+| 21 | **CDP target 列表里的 `chrome-extension://` 可能是内置组件扩展** | 扩展没加载成功时，`Target.getTargets` 里仍能看到内置组件扩展的 `chrome-extension://` target，误判成「扩展加载成功」。真判据是**你自己的扩展 ID** 的 service worker 出现，且扩展页能正常打开（不是 `chrome-error://`） |
+| 22 | **从模块解构时漏一个名字 = 运行时 ReferenceError** | 真实发生过：`background.js` 用了 `isPausedUntil` 但解构时漏了 → badge 计数完全不显示；`auth.js` 用了 `RULE_CTRL_CHARS` 但没导入 → 导入备份必崩。**语法检查查不出来**（语法完全合法）。`npm run check` 现在会静态比对「用到的名字」与「解构进来的名字」，缺一个就报错 |
+| 23 | **池满时「只删不加」会清空用户已有规则** | `updateDynamicRules` 是「先按 removeRuleIds 删、再按 addRules 加」的原子操作。预算截断后如果 `addRules` 变成空还照常下发，等于只删不加 —— 用户什么都没做错（只是订阅太多占满池子），自定义规则却被整段清空。**截断后为空必须直接 return 不下发**（订阅路径原本就有这个保护，用户规则路径漏了） |
+| 24 | **云端 `rulesets: {}` 会把本地开关全清掉** | `getSettings` 的默认值合并是 `Object.assign({}, DEFAULT, s.rulesets || {})`，**空对象不是 falsy**，默认值补不回来。云端一行 `rulesets:{}` 就能让用户本地的 5 个规则集开关全变 undefined。校验器要把空映射表判为「未提供有效值」，保留本地 |
 
 ---
 
 ## 6. 验证方法（可复现）
 
-四个脚本，跑完就算这轮改过东西了：
+### 6.1 基础（一条命令）
 
-| 命令 | 要不要开 Chrome | 覆盖什么 |
+```bash
+npm run verify     # = check + test，必须全绿
+npm run probe      # 运行时诊断 + 端到端自检
+```
+
+`npm run verify` 跑的是：
+
+| 脚本 | 覆盖什么 | 项数 |
 |---|---|---|
-| `node tools/verify-classify.js` | 不要 | 分类口径：同域名不漂移、静态规则按 ruleId 权威、参数清理不被吞（19 项） |
-| `node tools/verify-extension.js` | 要（CDP 离屏） | 全局暂停真的停用动态规则、放行规则增删、静态规则集恢复、统计提示条（6 项） |
-| `node tools/verify-round3-fixes.js` | 要 | 第三轮那批修复的行为：间隔落盘、含 `>` 的规则生效、三个导出、弹窗分层、计数阳性对照、同步勾选（22 项） |
-| `node tools/verify-ring.js` | 要 | 弹窗圆环中心 / 分段 / 芯片三者口径一致（7 项） |
+| `tools/check.mjs` | regexFilter 锚定 / 规则 id 区间 / DOM 契约 / 单一真源 / logger 页 modal.js 依赖 | 静态校验 |
+| `tools/test-host.mjs` | host 归一化与三层判定一致性 | 27 |
+| `tools/test-rules.mjs` | 用户规则段位上限 / 订阅全局预算 / **池满时不下发** | 19 |
+| `tools/test-validate.mjs` | 云端数据净化与校验（安全边界） | 103 |
 
-后三个都会自己起一个带 `--user-data-dir` 的离屏 Chrome，不碰你正在用的那个。
-
-### 6.1 基础
+**语法检查**（`node --check` 逐文件）：
 
 ```
-# 语法（全部 12 个 js）
 Get-ChildItem D:\AdShield 广告拦截器\adblocker\src -Recurse -Filter *.js |
   ForEach-Object { node --check $_.FullName }
 ```
+
+### 6.1b 自动化测试的覆盖边界
+
+`npm run verify` 是**逻辑层**验证，**不覆盖**以下行为 —— 它们只能靠真机（§6.2）：
+
+| 未覆盖 | 为什么 | 怎么验 |
+|---|---|---|
+| DNR 规则实际拦截请求 | 需要真实网络请求 | §6.2 场景 1 / `npm run probe` 的端到端自检 |
+| 元素隐藏 CSS 是否生效 | 需要真实页面 DOM | 打开含广告的页面，看元素是否被隐藏 |
+| 订阅拉取与解析 | 需要外网 | 设置页 → 订阅 → 立即更新 |
+| 账号登录注册 | 需要 Supabase 服务端 | 真机操作 |
+| 弹窗交互（ESC / 遮罩 / 多层） | 需要真实事件 | 真机点 |
+| 打包产物是否正确 | 需要跑 pack.ps1 | §6.3 |
+
+**新增代码时的规矩**：能写成纯函数的，就放进 `shared/validate.js` 之类的地方并加单元测试；
+只能靠真机验的，在 §6.2 补一个场景。
 
 ### 6.2 真机（CDP harness）
 
@@ -376,6 +449,143 @@ node D:\temp-adshield-repo\tools\verify-round3-fixes.js
 - Chrome 156 不把 blob 下载写进 `Browser.setDownloadBehavior` 指定的目录，**断言要放在 `Browser.downloadWillBegin` 事件 + 页面文案上**，查磁盘会假失败。
 - `setDownloadBehavior` 必须设在**浏览器会话**上；设在页面会话上会被静默忽略。
 
+### 6.6 上线门禁（12 项，逐项过）
+
+发布前逐项确认。**任何一项没过就不发。**
+
+| # | 检查项 | 怎么验 | 不过的典型原因 |
+|---|---|---|---|
+| 1 | 静态校验 + 149 项测试全绿 | `npm run verify` | 有新写的代码没加测试 |
+| 2 | 端到端自检三项全绿 | `npm run probe` | 规则集没编译 / content script 没注入 |
+| 3 | 动态规则占用率 < 90% | `npm run probe` 的「当前规则占用」 | 订阅太多，该停用几个 |
+| 4 | 全局暂停真的停用动态规则 | 真机：装一条会拦请求的动态规则 → 暂停 → 请求放行 → 恢复 → 又被拦 | 只关了静态规则集，动态规则照拦 |
+| 5 | 站点暂停对该站整站生效 | 真机：暂停后主框架与子框架资源都放行 | `allowAllRequests` 的 resourceTypes 没覆盖子框架 |
+| 6 | 元素隐藏在真实站点生效 | 打开含广告的页面，看元素是否被隐藏 | content script 没注入 / 选择器过期 |
+| 7 | URL 参数清理生效且**不计入拦截总数** | 访问带 `?utm_source=` 的 URL | 清理被算成拦截，圆环与中心数对不上 |
+| 8 | 设置页统计在正式安装版有数 | 装 CRX → 点一次扩展图标 → 回设置页看「拦截统计」 | 弹窗没回写统计缓冲（坑 #17） |
+| 9 | 云端脏数据被拒且本地不被清空 | 造一条含非法 `rulesets` / 超长规则 / 越界订阅的云端行 → 同步 | 校验器放行了非法值（坑 #22） |
+| 10 | 动态规则池满时**用户规则不被清空** | 塞满订阅 → 保存自定义规则 → 确认旧规则还在 | 只删不加（坑 #23） |
+| 11 | ZIP 与 CRX 载荷都干净且与工作区逐字节一致 | §6.3 | `_metadata` 备份混进包（坑 #15） |
+| 12 | 两个目录逐字节一致 | §6.4 / `node tools/sync-repo.mjs` | 改完忘了同步（坑 #14） |
+
+**发布前额外确认**（远端文档 §8 第 10/13 条）：
+- [ ] `git push` 前确认远端内容与预期一致
+- [ ] 版本号 +1，且 `manifest.json` 的 version 与发布说明一致
+- [ ] 签名私钥仍在项目目录外（`D://AdShield-Keys//adblocker.pem`）
+
+### 6.7 改动手册（我要做 X，先动哪里）
+
+| 我要做的事 | 改哪些文件 | 同步要改的地方 | 怎么验 |
+|---|---|---|---|
+| **新增一个静态规则集** | ① `adblocker/rules/xxx.json`<br>② `adblocker/manifest.json` 的 `declarative_net_request.rule_resources`<br>③ `background.js` 的 `STATIC_RULE_SETS` 加区间<br>④ `background.js` 的 `ALL_RULESETS` 加 id<br>⑤ `shared/config.js` 的 `RULESETS` 加显示项 | ④ 的 `ALL_RULESETS` 决定「规则集同步」时启用哪个；漏了 → 开关不生效 | `npm run check`（校验 id 落在区间内）+ `npm run probe` |
+| **新增一条 background 消息** | ① `shared/config.js` 的 `MSG` 加常量<br>② `background.js` 的 `handleOtherMessage` 加分支<br>③ 调用方 | `MSG` 加了但分支没加 → 消息永远无响应 | `npm run check`（校验 MSG 解构）+ 真机收发一次 |
+| **新增一个设置开关** | ① `shared/config.js` 的 `DEFAULT_SETTINGS`<br>② `options.html` 加控件<br>③ `options.js` 加读写（`render()` 渲染 + 事件处理） | 开关存 `adshield_settings`，**只有 background 能写**（见 AGENTS.md 单一写入者表） | `npm run verify` + 手动开关一次看是否落盘 |
+| **新增一个规则集开关项** | ① `shared/config.js` 的 `RULESETS`<br>② `options.html` 的开关控件<br>③ `background.js` 的 `ALL_RULESETS` | `ALL_RULESETS` 漏了 → 开关勾了但规则集不同步 | 手动开关后看 `chrome://extensions` 或诊断页的已启用规则集 |
+| **新增一个 DNR 规则段位** | ① `background.js` 顶部加 `XXX_RULE_BASE` 常量<br>② 段位表（AGENTS.md）加一行 | 段位**不能与现有重叠**：用户 100000~ / 站点 200000~ / 订阅 300000~ / 全局放行 2000000 | `npm run probe` 看「分段明细」是否落在预期段 |
+| **改订阅源的解析规则** | `background.js` 的 `parseSubscriptionText` | 解析结果为 0 时**必须不下发**（否则会清空该订阅原有规则）；这条保护在 `applySubscriptionText` 里，别删 | 拿真实订阅源试；解析为 0 时应报「未解析出任何可用规则」而不是「更新成功 0 条」 |
+| **改云端数据校验** | `shared/validate.js` | 改完必须跑 `tools/test-validate.mjs`；这批函数是云端数据进本地的**唯一防线** | `npm test`（103 项） |
+| **新增一个界面** | ① 新建 `xxx.html/js/css`<br>② `manifest.json` 无需改（扩展页不用注册）<br>③ 入口按钮所在页面 | 扩展页要在 `<head>` 里按序引 `shared/theme.js` → `shared/dom.js` → `shared/config.js` → `shared/modal.js` | `npm run check` 的 DOM 契约项 |
+| **加一条用户自定义规则语法** | `background.js` 的 `parseRuleLine` | 语法要同时被 `applyUserRules`（下发）和 `parseSubscriptionText`（订阅）理解，否则两条路径行为不一致 | 手动加一条规则，看 `adshield_user_rules_result` 的 applied/skipped |
+
+### 6.8 模块职责边界（别越界改）
+
+| 文件 | 负责 | 不负责 |
+|---|---|---|
+| `background.js` | DNR 规则的增删改查、订阅拉取与解析、统计聚合、消息分发、全局/站点放行 | UI 渲染、DOM 操作 |
+| `shared/validate.js` | 云端数据的白名单校验与净化（纯函数） | 任何 `chrome.*` 调用、任何 DOM 操作 |
+| `shared/host.js` | host 归一化与匹配语义 | 其它任何工具 |
+| `shared/config.js` | 默认设置、规则集显示定义、消息类型常量 | 业务逻辑 |
+| `shared/dom.js` | HTML 转义、文件下载 | 业务逻辑 |
+| `shared/modal.js` | 弹窗基座与栈管理 | 业务逻辑 |
+| `shared/auth.js` | 账号、云同步、设备管理、备份导入导出 | DNR 规则（那在 background） |
+| `content/cosmetic.js` | 元素隐藏（CSS 注入）、浏览助手的 DOM 检测 | 伪装全局变量（在 MAIN world） |
+| `content/anti-detect-main.js` | MAIN world 的全局变量伪装与真实检测 | 任何 `chrome.*` 调用（MAIN world 没有） |
+| `content/picker.js` | 元素拾取器 | 规则存储（交给 background） |
+| `options.js` | 设置页交互 | 写 `adshield_settings`（交给 background） |
+| `popup.js` | 工具栏弹窗 | 同上 |
+| `logger.js` | 日志页渲染 | 同上 |
+
+### 6.9 高风险改动区（改错了会怎样）
+
+**A. 会导致用户数据丢失的地方**
+
+| 位置 | 风险 | 现在的防线 | 防线强度 |
+|---|---|---|---|
+| `auth.js` 的 `applyCloudData` | 云端行整块覆盖本地设置 | 4 个 `sanitizeCloud*` 白名单校验 + 「全非法则保留本地」兜底 | 中 |
+| `auth.js` 的 `importAllData` | 备份导入覆盖本地配置 | 导入前校验 + `skipped` 计数 | 中 |
+| `background.js` 的 `applyUserRules` | 池满时下发空 `addRules` → **用户已有规则被整段清空** | 截断到空时**直接 return 不下发**（`err.code = "POOL_FULL"`） | 中 |
+| `validate.js` 的 `sanitizeCloudSettings` | 云端 `rulesets: {}` 把本地开关全清掉 | 空映射表判为「未提供」，保留本地 | 中 |
+| `options.js` 的元素隐藏规则删除 | 页面自己 `storage.set` + 发消息 → 两个写入者竞争 | 已改为**只发消息**，由 background 统一写 | 强 |
+
+**B. 会影响 DNR 规则 ID 分配的地方**
+
+- 四个段位常量（`USER_RULE_BASE` / `SITE_RULE_BASE` / `SUB_RULE_BASE` / `GLOBAL_ALLOW_RULE_ID`）——**一改全错**，见 §3.2 的表
+- 静态规则的 ruleId → 分类映射（`STATIC_RULE_SETS`）—— 改了 JSON 不同步这张表，分类统计会**静默错归类**
+- `updateDynamicRules` 的提交方式 —— 单次调用里同一 ID 同时出现在 remove 和 add 是「替换」语义（2026-11-01 实测），但 `syncGlobalPauseRule` 仍保持两次调用
+
+**C. 有并发 / 时序陷阱的地方**
+
+| 陷阱 | 说明 |
+|---|---|
+| 订阅更新队列 | 订阅操作串行化，防 `updateDynamicRules` 并发写冲突 |
+| 30 秒拉取窗口内的用户改动被抹掉 | `updateAllSubscriptions` 拉取期间用户改了规则，合并时以**拉取后**的 `fresh` 为准 |
+| Service Worker 挂起 vs `setTimeout` | SW 空闲即挂起，`setTimeout` 不可靠；跨重启要保留的状态必须存 storage |
+| 内存缓冲 vs 落盘 | `__statsBuffer` 实时但会丢，storage 持久但有延迟；清空类操作**必须同时清两边** |
+| 弹窗 2 秒轮询 vs 60 秒限流 | `getMatchedRules` 配额 20 次/10 分钟，弹窗轮询必须限流 |
+| `storage.onChanged` 的级联 | 写 storage → 触发监听 → 又写 storage；注意防抖与自触发 |
+| 定时器重建 | `chrome.alarms.create` 同名会整体替换并推后下次触发 |
+
+**D. 「看起来能跑其实不生效」的陷阱**
+
+| 陷阱 | 说明 |
+|---|---|
+| `regexFilter` 未锚定 | 全串匹配，非锚定 = 静默 0 命中，但规则集照样编译成功（见坑 #2） |
+| `onRuleMatchedDebug` 只在未打包扩展触发 | 正式版要用 `getMatchedRules({tabId})` + activeTab（见坑 #17） |
+| 分类判定：静态 ruleId 优先 | 多个规则集 priority 相同时，Chrome 可能先命中 ads，导致 tracking 永不被选中 |
+| `url_clean` 不计入拦截总数 | 它是重定向不是拦截；计进去会让圆环与中心数对不上 |
+| **`MSG` 用了但没解构** | 运行时 ReferenceError，**语法检查查不出来**（见坑 #22） |
+| host 归一化的单一真源 | 自己写一份就会出现「请求已放行但元素仍被隐藏」（见坑 #17、AGENTS.md） |
+| **`updateBadgeForTab` 的 catch 会吞掉任何异常** | `catch (e) { /* tab 已关闭 */ }` —— 里面其实什么也没做，但因为异常被吞，**漏解构会静默表现为「badge 不显示数字」而不是报错**。这是坑 #22 那个 bug 长期没被发现的原因 |
+
+### 6.10 已修复但防线脆弱的缺陷（怎么判断防线还在不在）
+
+这一节记录「已经踩过、已经修好、但防线很脆」的坑。
+**重点不是历史，是：这些防线现在长什么样、你能怎么判断它还在不在。**
+
+| # | 曾经的缺陷 | 现在的防线 | 强度 |
+|---|---|---|---|
+| 1 | `isPausedUntil` 未解构 → badge 永远不显示数字 | 已解构 | 弱：靠 `updateBadgeForTab` 的 catch 静默；`npm run check` 现在会校验解构完整性 |
+| 2 | `RULE_CTRL_CHARS` 未导出 → 导入备份必崩 | 已加进导出与解构清单 | 中：两份清单手写，`check.mjs` 现在校验配对 |
+| 3 | 池满时下发空 `addRules` → 清空用户规则 | 截断到空直接 return | 中：`test-rules.mjs` 是**逻辑复刻**，复刻里没有「先删后加」的原子语义 |
+| 4 | 云端 `rulesets: {}` 覆盖本地开关 | 空映射表不写入 | 中 |
+| 5 | 元素隐藏规则两个写入者竞争 | 只发消息，background 统一写 | 强：`check.mjs` 校验单一写入者 |
+
+**手动确认这几条防线还在不在**：
+
+```bash
+grep -n "adshieldHost" adblocker/src/background.js | head -1        # 1
+grep -n "RULE_CTRL_CHARS" adblocker/src/shared/validate.js adblocker/src/shared/auth.js  # 2
+grep -n "POOL_FULL" adblocker/src/background.js                      # 3
+grep -n "Object.keys(clean).length" adblocker/src/shared/validate.js # 4
+grep -n "adshield_user_cosmetic" adblocker/src/options.js            # 5 应只有读、没有 set
+```
+
+### 6.11 自动化校验的能力边界
+
+**`npm run check` 覆盖**：regexFilter 锚定 / 静态规则 id 区间 / DOM 契约 / 单一真源 /
+storage 键单一写入者 / **共享模块解构完整性** / logger 页 modal.js 依赖。
+
+**`npm test` 覆盖**：host 归一化与三层判定（27）/ 规则段位与预算（19）/ 云端数据净化（103）。
+
+**不覆盖的（改动时要格外小心）**：
+- ❌ `probe.js` 的 DOM 契约（不在 `check.mjs` 的 `PAGES` 列表里）
+- ❌ `content/*.js` 的任何检查
+- ❌ `rules/*.json` 的**区间重叠**检查
+- ❌ 订阅 ID 撞号的端到端验证
+- ❌ `applyUserRules` / `applySubscriptionText` 的规则 id 是否越段
+- ❌ `MSG` 常量的**值**与实际调用是否一致（改名就会断）
+- ❌ `updateDynamicRules` 的「先删后加」原子语义 —— **单元测试复刻不了这个**，只能真机验
+
 ---
 
 ## 7. 未完成 / 待办
@@ -405,6 +615,19 @@ cd D:/temp-adshield-repo && git add adblocker/src/shared/auth.js && git commit
 
 - `.ps1` 里**不要写中文路径字面量**（PS 5.1 按 ANSI 解码 UTF-8 无 BOM 会乱码），用 `$PSScriptRoot` 派生。
 - 收紧过的文件用 `Remove-Item -Force` 会报「访问被拒绝」；先 `icacls <file> /grant "<user>:(D)"`，再用 `[System.IO.File]::Delete()` 才能删掉。
+
+### 7.2b ✅ 已完成（2026-11-01）：共享模块化 + 测试体系 + 运行时诊断
+
+第二轮（2.9.97）做了四件事，详见 `REVIEW-2026-11-01.md`：
+
+1. **抽出 4 个共享模块**（各自单一真源）：`shared/host.js`（host 归一化）、
+   `shared/dom.js`（转义 + 下载）、`shared/config.js`（默认设置 + 消息协议）、
+   `shared/validate.js`（云端数据校验纯函数）。消除了 5 份 `escapeHtml`、
+   3 份漂移的 `DEFAULT_SETTINGS`、2 份 `sendMessage`。
+2. **auth.js 的 6 处手写弹窗收敛到 `shared/modal.js` 的 `showFormDialog` 基座**，
+   auth.js 从 2782 行降到 2467 行，且弹窗行为与 `showConfirm` 统一。
+3. **测试从 0 增至 149 项**：`npm run verify` = 静态校验 + 27 + 19 + 103。
+4. **运行时诊断工具**：`npm run probe` 自启 Chrome + CDP 采集，零人工操作。
 
 ### 7.3 i18n（最大的未开工项）
 
@@ -453,6 +676,7 @@ cd D:/temp-adshield-repo && git add adblocker/src/shared/auth.js && git commit
 
 | 版本 | 日期 | 内容 |
 |---|---|---|
+| **2.9.97**（待发布） | 2026-11-01 | 第二轮：抽出 4 个共享模块（host/dom/config/validate），auth.js 6 处手写弹窗收敛到 modal.js 基座；测试 0 → 149 项；新增运行时诊断工具（`npm run probe`，自启 Chrome + CDP，零人工）；修 3 个真实缺陷（`isPausedUntil` 与 `RULE_CTRL_CHARS` 解构漏项、池满时清空用户已有规则）；补 2 个 P1（云端空 `rulesets` 覆盖本地、正式版设置页统计无数据 + 弹窗回写统计缓冲）；`check.mjs` 增加「单一写入者」与「解构完整性」两项校验 |
 | **2.9.96** | 2026-11-01 | **已发布为 GitHub Release**，一次覆盖 2.9.94 与 2.9.95 的内容：云同步不再吃掉含 `>` 的元素隐藏规则、订阅源解析失败不再清空旧规则、自动更新闹钟不再被重置、URL 清理不再计入拦截总数、账号过期与断网分开处理、请求全部带超时、设置页此前没接线的按钮和下拉补齐、弹窗改为独立分层；打包脚本修掉 CRX 混入 `_metadata` 备份的问题 |
 | 2.9.95 | 2026-11-01 | 遗留批量修复：设备删除越权、服务端错误正文注入、云端/备份 CSS 注入面、订阅 ID 去重、规则上限改用实测常量、正式版统计接 `getMatchedRules`、`docs/supabase-rls.sql` 入仓 |
 | 2.9.94 | 2026-11-01 | 全局暂停真正停用动态规则；浏览助手文案误判（选择器收窄 + 500 字上限）；设置页补统计可用性说明；`pack.ps1` 的示例扩展 ID 修正 |
@@ -472,4 +696,4 @@ git 仓库提交：
 
 ## 10. 一句话给下一个 AI
 
-规则系统有两套（静态规则集 / 共享池子的动态规则），id 段不能乱；Chrome 的 API 行为和数值上限**一律先实测再写进代码**；品牌版 Chrome 装不了未打包扩展，要用 CDP `Extensions.loadUnpacked`；打包产物和 git 仓库要手工同步并且逐字节校验——这四条踩过坑，其余按 §8 的规矩来。
+规则系统有两套（静态规则集 / 共享池子的动态规则），id 段不能乱；Chrome 的 API 行为和数值上限**一律先实测再写进代码**；品牌版 Chrome 装不了未打包扩展，要用 CDP `Extensions.loadUnpacked`；打包产物和 git 仓库要手工同步并且逐字节校验；**从共享模块解构时漏一个名字就是运行时 ReferenceError，语法检查查不出来，跑 `npm run verify`**——这五条踩过坑，其余按 §8 的规矩来。

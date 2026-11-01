@@ -8,6 +8,15 @@
   const SUPABASE_ANON_KEY = "sb_publishable_S1HoS7Y4VCKDwvnCbk2mWQ_lZmdbl-W";
 
   const AUTH_KEY = "adshield_auth";
+
+  // 校验与净化纯函数来自 shared/validate.js（独立于 chrome/DOM，可单独测试）
+  const {
+    translateError, validateEmail, validatePassword, validateNewPassword,
+    evalPasswordStrength, maskEmail, isOfflineError,
+    isSafeCssSelector, isSafeUserRule, RULE_CTRL_CHARS,
+    sanitizeCloudUserRules, sanitizeCloudSubscriptions,
+    sanitizeCloudWhitelist, sanitizeCloudSettings
+  } = window.adshieldValidate;
   const $ = (s) => document.querySelector(s);
 
   // ===== 本地状态管理 =====
@@ -21,24 +30,7 @@
   }
 
   // 翻译 Supabase 错误信息为中文
-  function translateError(msg) {
-    if (!msg) return "未知错误";
-    const m = String(msg);
-    if (m.includes("Invalid login credentials")) return "邮箱或密码错误";
-    if (m.includes("User already registered")) return "该邮箱已注册，请直接登录";
-    if (m.includes("Email not confirmed")) return "邮箱未验证，请先到邮箱点击验证链接";
-    if (m.includes("New password should be different from the old password")) return "新密码不能与旧密码相同";
-    if (m.includes("原密码不正确")) return "原密码不正确";
-    if (m.includes("Password should be at least")) return "密码至少 6 位";
-    if (m.includes("signup is disabled")) return "注册功能已关闭";
-    if (m.includes("email rate limit exceeded")) return "验证邮件发送过于频繁，请稍后再试";
-    if (m.includes("For security purposes")) {
-      const match = m.match(/after (\d+) seconds?/i);
-      return match ? ("请求过于频繁，请 " + match[1] + " 秒后重试") : "请求过于频繁，请稍后再试";
-    }
-    if (m.includes("JWT expired")) return "登录已过期，请重新登录";
-    return m;
-  }
+
 
   // ===== 系统版本识别（高精度）=====
   // 缓存准确的 OS 名（异步 API 只查一次）
@@ -256,122 +248,90 @@
   }
 
   // 头像修改弹窗
-  function showAvatarPickerDialog() {
-    return new Promise(async (resolve) => {
-      const currentAvatar = await getAvatar();
-      const state = await getAuthState();
-      const email = state ? state.email : "";
+  // 基于 shared/modal.js 的 showFormDialog 基座：overlay / cleanup / ESC / 遮罩点击
+  // 全部由基座统一处理，这里只负责「预设色块」「上传图片」「恢复默认」三件事。
+  async function showAvatarPickerDialog() {
+    const currentAvatar = await getAvatar();
+    const state = await getAuthState();
+    const email = state ? state.email : "";
 
-      const presetHtml = AVATAR_PRESETS.map(p => {
-        const selected = currentAvatar && currentAvatar.type === "color" && currentAvatar.value === p.name;
-        return '<div class="avatar-option' + (selected ? ' selected' : '') + '" data-preset="' + p.name + '" style="background:linear-gradient(135deg,' + p.c1 + ',' + p.c2 + ')">' + p.name[0] + '</div>';
-      }).join("");
+    const presetHtml = AVATAR_PRESETS.map(p => {
+      const selected = currentAvatar && currentAvatar.type === "color" && currentAvatar.value === p.name;
+      return '<div class="avatar-option' + (selected ? ' selected' : '') + '" data-preset="' + p.name + '" style="background:linear-gradient(135deg,' + p.c1 + ',' + p.c2 + ')">' + p.name[0] + '</div>';
+    }).join("");
 
-      const html = `
-        <div class="avatar-picker">
-          <div>
-            <div class="avatar-picker-section-title">选择预设颜色</div>
-            <div class="avatar-picker-grid">${presetHtml}</div>
-          </div>
-          <div>
-            <div class="avatar-picker-section-title">或上传图片</div>
-            <button class="avatar-upload-btn" id="avatarUploadBtn">
-              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
-                <polyline points="17 8 12 3 7 8"/>
-                <line x1="12" y1="3" x2="12" y2="15"/>
-              </svg>
-              上传图片（自动压缩）
-            </button>
-          </div>
-          <div class="avatar-hint" id="avatarHint" style="font-size:11.5px;color:var(--text-tertiary);text-align:center;"></div>
+    const html = `
+      <div class="avatar-picker">
+        <div>
+          <div class="avatar-picker-section-title">选择预设颜色</div>
+          <div class="avatar-picker-grid">${presetHtml}</div>
         </div>
-      `;
-
-      const overlay = document.createElement("div");
-      overlay.className = "adshield-modal-overlay";
-      overlay.setAttribute("data-type", "info");
-      overlay.setAttribute("data-size", "normal");
-
-      overlay.innerHTML = `
-        <div class="adshield-modal" role="dialog" aria-modal="true">
-          <div class="adshield-modal-body">
-            <div class="adshield-modal-title">修改头像</div>
-            <div class="adshield-modal-message"></div>
-          </div>
-          <div class="adshield-modal-actions">
-            <button class="adshield-modal-btn adshield-modal-btn-cancel" data-reset>恢复默认</button>
-            <button class="adshield-modal-btn adshield-modal-btn-confirm" data-close>关闭</button>
-          </div>
+        <div>
+          <div class="avatar-picker-section-title">或上传图片</div>
+          <button class="avatar-upload-btn" id="avatarUploadBtn">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+            上传图片（自动压缩）
+          </button>
         </div>
-      `;
-      overlay.querySelector(".adshield-modal-message").innerHTML = html;
-      document.body.appendChild(overlay);
-      requestAnimationFrame(() => overlay.classList.add("open"));
+        <div class="avatar-hint" id="avatarHint" style="font-size:11.5px;color:var(--text-tertiary);text-align:center;"></div>
+      </div>
+    `;
 
-      function cleanup() {
-        overlay.classList.remove("open");
-        setTimeout(() => overlay.remove(), 180);
-      }
-      function onKey(e) { if (e.key === "Escape") { cleanup(); document.removeEventListener("keydown", onKey); resolve(); } }
-      document.addEventListener("keydown", onKey);
-
-      // 预设点击
-      overlay.querySelectorAll(".avatar-option").forEach(el => {
-        el.addEventListener("click", async () => {
-          const name = el.getAttribute("data-preset");
-          await setAvatar({ type: "color", value: name });
-          overlay.querySelectorAll(".avatar-option").forEach(x => x.classList.remove("selected"));
-          el.classList.add("selected");
-          await renderAccount();
-        });
-      });
-
-      // 上传按钮
-      const fileInput = document.getElementById("avatarFileInput");
-      overlay.querySelector("#avatarUploadBtn").addEventListener("click", () => fileInput.click());
-      fileInput.onchange = async () => {
-        const file = fileInput.files && fileInput.files[0];
-        fileInput.value = "";
-        if (!file) return;
-        const hint = overlay.querySelector("#avatarHint");
-        if (!file.type.startsWith("image/")) {
-          hint.textContent = "请选择图片文件（JPG / PNG / WebP）";
-          hint.style.color = "var(--color-danger-500)";
-          return;
-        }
-        hint.textContent = "处理中（自动压缩到 256×256）...";
-        hint.style.color = "var(--text-tertiary)";
-        try {
-          const dataUrl = await compressImage(file, 256, 0.85);
-          await setAvatar({ type: "image", value: dataUrl });
-          hint.textContent = "✅ 已更新";
-          hint.style.color = "var(--color-success-600)";
-          await renderAccount();
-        } catch (e) {
-          hint.textContent = "处理失败：" + e.message;
-          hint.style.color = "var(--color-danger-500)";
-        }
-      };
-
-      // 恢复默认
-      overlay.querySelector("[data-reset]").addEventListener("click", async () => {
+    return showFormDialog({
+      title: "修改头像",
+      bodyHtml: html,
+      showIcon: false,
+      cancelText: "恢复默认",
+      confirmText: "关闭",
+      // 「恢复默认」= 取消按钮：清掉头像后关闭
+      onCancel: async () => {
         await setAvatar(null);
         await renderAccount();
-        cleanup();
-        document.removeEventListener("keydown", onKey);
-        resolve();
-      });
+      },
+      onSubmit: () => true,   // 「关闭」直接关掉，不改动任何东西
+      onMount: (root) => {
+        // 预设色块
+        root.querySelectorAll(".avatar-option").forEach(el => {
+          el.addEventListener("click", async () => {
+            const name = el.getAttribute("data-preset");
+            await setAvatar({ type: "color", value: name });
+            root.querySelectorAll(".avatar-option").forEach(x => x.classList.remove("selected"));
+            el.classList.add("selected");
+            await renderAccount();
+          });
+        });
 
-      // 关闭
-      overlay.querySelector("[data-close]").addEventListener("click", () => {
-        cleanup();
-        document.removeEventListener("keydown", onKey);
-        resolve();
-      });
-      overlay.addEventListener("click", (e) => {
-        if (e.target === overlay) { cleanup(); document.removeEventListener("keydown", onKey); resolve(); }
-      });
+        // 上传按钮
+        const fileInput = document.getElementById("avatarFileInput");
+        root.querySelector("#avatarUploadBtn").addEventListener("click", () => fileInput.click());
+        fileInput.onchange = async () => {
+          const file = fileInput.files && fileInput.files[0];
+          fileInput.value = "";
+          if (!file) return;
+          const hint = root.querySelector("#avatarHint");
+          if (!file.type.startsWith("image/")) {
+            hint.textContent = "请选择图片文件（JPG / PNG / WebP）";
+            hint.style.color = "var(--color-danger-500)";
+            return;
+          }
+          hint.textContent = "处理中（自动压缩到 256×256）...";
+          hint.style.color = "var(--text-tertiary)";
+          try {
+            const dataUrl = await compressImage(file, 256, 0.85);
+            await setAvatar({ type: "image", value: dataUrl });
+            hint.textContent = "✅ 已更新";
+            hint.style.color = "var(--color-success-600)";
+            await renderAccount();
+          } catch (e) {
+            hint.textContent = "处理失败：" + e.message;
+            hint.style.color = "var(--color-danger-500)";
+          }
+        };
+      }
     });
   }
 
@@ -513,27 +473,12 @@
   }
 
   // ===== 邮箱/密码校验 =====
-  function validateEmail(email) {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
-  }
+
   // 登录校验（宽松，兼容老用户）
-  function validatePassword(pwd) {
-    return typeof pwd === "string" && pwd.length >= 6;
-  }
+
 
   // 新密码策略（严格，仅用于注册 / 重置 / 改密）
-  function validateNewPassword(pwd) {
-    if (typeof pwd !== "string") return { ok: false, reason: "密码格式错误" };
-    if (pwd.length < 8) return { ok: false, reason: "密码至少 8 位" };
-    if (pwd.length > 128) return { ok: false, reason: "密码不能超过 128 位" };
-    if (!/[A-Z]/.test(pwd)) return { ok: false, reason: "需含至少 1 个大写字母" };
-    if (!/[a-z]/.test(pwd)) return { ok: false, reason: "需含至少 1 个小写字母" };
-    if (!/[0-9]/.test(pwd)) return { ok: false, reason: "需含至少 1 个数字" };
-    // 拒绝常见弱密码
-    const COMMON = ["password", "12345678", "qwerty123", "abc12345", "admin123", "11111111", "password1", "123456789"];
-    if (COMMON.includes(pwd.toLowerCase())) return { ok: false, reason: "密码过于简单，请更换" };
-    return { ok: true };
-  }
+
 
   // 渲染密码强度条（DOM 显示）
   function renderStrength(el, pwd) {
@@ -552,23 +497,7 @@
   }
 
   // 密码强度评估（实时反馈）
-  function evalPasswordStrength(pwd) {
-    if (!pwd) return { score: 0, level: "empty", label: "", tips: [] };
-    let score = 0;
-    const tips = [];
-    if (pwd.length >= 8) score += 1; else tips.push("至少 8 位");
-    if (pwd.length >= 12) score += 1;
-    if (/[a-z]/.test(pwd)) score += 1; else tips.push("含小写字母");
-    if (/[A-Z]/.test(pwd)) score += 1; else tips.push("含大写字母");
-    if (/[0-9]/.test(pwd)) score += 1; else tips.push("含数字");
-    if (/[^a-zA-Z0-9]/.test(pwd)) score += 1; else tips.push("含特殊字符");
 
-    let level, label;
-    if (score <= 2) { level = "weak"; label = "弱"; }
-    else if (score <= 4) { level = "medium"; label = "中"; }
-    else { level = "strong"; label = "强"; }
-    return { score, level, label, tips };
-  }
 
   // ===== 登录失败锁定 =====
   const LOGIN_FAIL_KEY = "adshield_login_fails";
@@ -653,14 +582,7 @@
 
   // ===== 登录尝试日志 =====
   const LOGIN_LOG_KEY = "adshield_login_log";
-  function maskEmail(email) {
-    if (!email) return "";
-    const parts = email.split("@");
-    if (parts.length !== 2) return email;
-    const u = parts[0], d = parts[1];
-    const masked = u.length <= 2 ? (u[0] || "") + "*" : u[0] + "***" + u.slice(-1);
-    return masked + "@" + d;
-  }
+
   async function logLoginAttempt(email, ok, reason) {
     try {
       const store = await chrome.storage.local.get(LOGIN_LOG_KEY);
@@ -679,13 +601,7 @@
   // 网络层失败（连不上/超时）与凭据被服务端拒绝是两回事：
   // 把断网也报成「登录已过期」会把好好的会话踢掉，用户既看不懂也自救不了。
   const NET_TIMEOUT_MS = 15000;
-  function isOfflineError(e) {
-    if (!e) return false;
-    const n = String(e.name || "");
-    const m = String(e.message || e);
-    return n === "TimeoutError" || n === "AbortError" ||
-      /Failed to fetch|NetworkError|ERR_[A-Z_]+|timed out|超时|网络/i.test(m);
-  }
+
 
   async function sbRequest(path, options) {
     const url = SUPABASE_URL + path;
@@ -987,93 +903,59 @@
       </form>
     `;
 
-    return new Promise((resolve) => {
-      const overlay = document.createElement("div");
-      overlay.className = "adshield-modal-overlay";
-      overlay.setAttribute("data-type", "danger");
-      overlay.setAttribute("data-size", "normal");
-
-      overlay.innerHTML = `
-        <div class="adshield-modal" role="dialog" aria-modal="true">
-          <div class="adshield-modal-icon" data-icon></div>
-          <div class="adshield-modal-body">
-            <div class="adshield-modal-title">删除账号 — 安全验证</div>
-            <div class="adshield-modal-message"></div>
-          </div>
-          <div class="adshield-modal-actions">
-            <button class="adshield-modal-btn adshield-modal-btn-cancel" data-cancel>取消</button>
-            <button class="adshield-modal-btn adshield-modal-btn-confirm" data-confirm>验证并删除</button>
-          </div>
-        </div>
-      `;
-
-      const iconEl = overlay.querySelector("[data-icon]");
-      iconEl.innerHTML = '<svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>';
-
-      overlay.querySelector(".adshield-modal-message").innerHTML = html;
-      document.body.appendChild(overlay);
-      requestAnimationFrame(() => overlay.classList.add("open"));
-
-      const form = overlay.querySelector("#delForm");
-      const codeInput = overlay.querySelector("#delCode");
-      const hint = overlay.querySelector("#delHint");
-      const btnConfirm = overlay.querySelector("[data-confirm]");
-      const btnCancel = overlay.querySelector("[data-cancel]");
-      const btnResend = overlay.querySelector("#delResend");
-
-      function cleanup() {
-        overlay.classList.remove("open");
-        setTimeout(() => overlay.remove(), 180);
-      }
-
-      function submit() {
+    return showFormDialog({
+      title: "删除账号 — 安全验证",
+      bodyHtml: html,
+      type: "danger",
+      confirmText: "验证并删除",
+      cancelText: "取消",
+      focusSelector: "#delCode",
+      onSubmit: (root) => {
+        const codeInput = root.querySelector("#delCode");
+        const hint = root.querySelector("#delHint");
         const code = (codeInput.value || "").trim();
         hint.textContent = "";
         hint.className = "auth-hint";
         if (!/^[0-9]{6,10}$/.test(code)) {
           hint.textContent = "请输入邮件中的验证码（6~10 位数字）";
           hint.classList.add("err");
-          return;
+          return false;   // 校验不通过，弹窗保持打开
         }
-        cleanup();
-        resolve(code);
+        return code;
+      },
+      onMount: (root) => {
+        const hint = root.querySelector("#delHint");
+        const btnResend = root.querySelector("#delResend");
+        // 回车提交
+        root.querySelector("#delForm").addEventListener("submit", (e) => {
+          e.preventDefault();
+          const btn = root.querySelector("[data-confirm]");
+          if (btn) btn.click();
+        });
+        btnResend.addEventListener("click", async (e) => {
+          e.preventDefault();
+          btnResend.textContent = "发送中...";
+          btnResend.style.pointerEvents = "none";
+          try {
+            await sendDeleteVerificationEmail(email);
+            btnResend.textContent = "已重新发送";
+            setTimeout(() => {
+              btnResend.textContent = "重新发送验证码";
+              btnResend.style.pointerEvents = "";
+            }, 3000);
+          } catch (e2) {
+            const m = String(e2.message || e2);
+            // 与 shared/validate.js 的 translateError 保持一致：
+            // Supabase 真实报文是 "...once every N seconds"，数字在 every 之后
+            const match = m.match(/(?:after|every)\s+(\d+)\s*seconds?/i);
+            btnResend.textContent = match ? ("请 " + match[1] + " 秒后重试") : "发送过于频繁";
+            setTimeout(() => {
+              btnResend.textContent = "重新发送验证码";
+              btnResend.style.pointerEvents = "";
+            }, 5000);
+          }
+        });
       }
-
-      form.addEventListener("submit", (e) => { e.preventDefault(); submit(); });
-      btnConfirm.addEventListener("click", submit);
-      btnCancel.addEventListener("click", () => { cleanup(); resolve(null); });
-      overlay.addEventListener("click", (e) => {
-        if (e.target === overlay) { cleanup(); resolve(null); }
-      });
-
-      btnResend.addEventListener("click", async (e) => {
-        e.preventDefault();
-        btnResend.textContent = "发送中...";
-        btnResend.style.pointerEvents = "none";
-        try {
-          await sendDeleteVerificationEmail(email);
-          btnResend.textContent = "已重新发送";
-          setTimeout(() => {
-            btnResend.textContent = "重新发送验证码";
-            btnResend.style.pointerEvents = "";
-          }, 3000);
-        } catch (e2) {
-          const m = String(e2.message || e2);
-          const match = m.match(/after (\d+) seconds?/i);
-          btnResend.textContent = match ? ("请 " + match[1] + " 秒后重试") : "发送过于频繁";
-          setTimeout(() => {
-            btnResend.textContent = "重新发送验证码";
-            btnResend.style.pointerEvents = "";
-          }, 5000);
-        }
-      });
-
-      const onKey = (e) => {
-        if (e.key === "Escape") { cleanup(); document.removeEventListener("keydown", onKey); resolve(null); }
-      };
-      document.addEventListener("keydown", onKey);
-
-      setTimeout(() => codeInput.focus(), 50);
     });
   }
 
@@ -1101,7 +983,8 @@
   }
 
   // 重置密码弹窗（从邮件链接跳回后）
-  function showRecoveryPasswordDialog(accessToken, refreshToken) {
+  // 基于 shared/modal.js 的 showFormDialog 基座。
+  async function showRecoveryPasswordDialog(accessToken, refreshToken) {
     const html = `
       <form class="auth-form" id="recForm" autocomplete="on">
         <div class="auth-field">
@@ -1117,51 +1000,25 @@
       </form>
     `;
 
-    return new Promise((resolve) => {
-      const overlay = document.createElement("div");
-      overlay.className = "adshield-modal-overlay";
-      overlay.setAttribute("data-type", "info");
-      overlay.setAttribute("data-size", "normal");
-      overlay.innerHTML = `
-        <div class="adshield-modal" role="dialog" aria-modal="true">
-          <div class="adshield-modal-body">
-            <div class="adshield-modal-title">重置密码</div>
-            <div class="adshield-modal-message"></div>
-          </div>
-          <div class="adshield-modal-actions">
-            <button class="adshield-modal-btn adshield-modal-btn-confirm" data-confirm>确定</button>
-          </div>
-        </div>
-      `;
-      overlay.querySelector(".adshield-modal-message").innerHTML = html;
-      document.body.appendChild(overlay);
-      requestAnimationFrame(() => overlay.classList.add("open"));
-
-      const form = overlay.querySelector("#recForm");
-      const pwd = overlay.querySelector("#recPwd");
-      const pwd2 = overlay.querySelector("#recPwd2");
-      const hint = overlay.querySelector("#recHint");
-      const strengthEl = overlay.querySelector("#recStrength");
-      const btnConfirm = overlay.querySelector("[data-confirm]");
-
-      function cleanup() {
-        overlay.classList.remove("open");
-        setTimeout(() => overlay.remove(), 180);
-      }
-
-      // 实时强度
-      pwd.addEventListener("input", () => {
-        renderStrength(strengthEl, pwd.value);
-      });
-
-      async function doSubmit() {
+    return showFormDialog({
+      title: "重置密码",
+      bodyHtml: html,
+      showIcon: false,
+      confirmText: "确定",
+      cancelText: "取消",
+      focusSelector: "#recPwd",
+      onSubmit: async (root) => {
+        const pwd = root.querySelector("#recPwd");
+        const pwd2 = root.querySelector("#recPwd2");
+        const hint = root.querySelector("#recHint");
+        const btnConfirm = root.querySelector("[data-confirm]");
         const p1 = pwd.value;
         const p2 = pwd2.value;
         hint.textContent = "";
         hint.className = "auth-hint";
         const check = validateNewPassword(p1);
-        if (!check.ok) { hint.textContent = check.reason; hint.classList.add("err"); return; }
-        if (p1 !== p2) { hint.textContent = "两次密码不一致"; hint.classList.add("err"); return; }
+        if (!check.ok) { hint.textContent = check.reason; hint.classList.add("err"); return false; }
+        if (p1 !== p2) { hint.textContent = "两次密码不一致"; hint.classList.add("err"); return false; }
 
         btnConfirm.disabled = true;
         btnConfirm.textContent = "提交中...";
@@ -1179,18 +1036,29 @@
           });
           const data = await resp.json().catch(() => ({}));
           if (!resp.ok) throw new Error(data.msg || data.message || ("HTTP " + resp.status));
-          cleanup();
-          resolve(true);
+          return true;
         } catch (e) {
           hint.textContent = translateError(e.message || e);
           hint.classList.add("err");
           btnConfirm.disabled = false;
           btnConfirm.textContent = "确定";
+          return false;   // 保持弹窗打开，用户可重试
         }
+      },
+      onMount: (root) => {
+        const pwd = root.querySelector("#recPwd");
+        const strengthEl = root.querySelector("#recStrength");
+        // 实时强度
+        pwd.addEventListener("input", () => {
+          renderStrength(strengthEl, pwd.value);
+        });
+        // 回车提交
+        root.querySelector("#recForm").addEventListener("submit", (e) => {
+          e.preventDefault();
+          const btn = root.querySelector("[data-confirm]");
+          if (btn) btn.click();
+        });
       }
-      form.addEventListener("submit", (e) => { e.preventDefault(); doSubmit(); });
-      btnConfirm.addEventListener("click", doSubmit);
-      setTimeout(() => pwd.focus(), 50);
     });
   }
 
@@ -1320,12 +1188,8 @@
   }
 
   // 简易 HTML 转义（本地工具函数）
-  function escapeHtmlSimple(s) {
-    return String(s == null ? "" : s).replace(/[&<>"']/g, c => (
-      { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]
-    ));
-  }
-
+  // HTML 转义统一走 shared/dom.js（options.html 已在 auth.js 之前加载它）
+  const { escapeHtml: escapeHtmlSimple, downloadJson } = window.adshieldDom;
   // 渲染设备列表
   async function renderDevices() {
     const listEl = document.getElementById("deviceList");
@@ -1421,14 +1285,8 @@
       if (store[k] !== undefined) payload.data[k] = store[k];
     }
     const json = JSON.stringify(payload, null, 2);
-    const blob = new Blob([json], { type: "application/json" });
-    const url = URL.createObjectURL(blob);
     const ts = new Date().toISOString().slice(0, 10);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "adshield-backup-" + ts + ".json";
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    downloadJson(payload, "adshield-backup-" + ts + ".json");
     return { size: json.length, count: Object.keys(payload.data).length };
   }
 
@@ -1490,7 +1348,8 @@
   }
 
   // ===== 忘记密码弹窗 =====
-  function showForgotPasswordDialog(presetEmail) {
+  // 基于 shared/modal.js 的 showFormDialog 基座
+  async function showForgotPasswordDialog(presetEmail) {
     const emailValue = presetEmail ? 'value="' + presetEmail.replace(/"/g, "&quot;") + '"' : '';
     const html = `
       <form class="auth-form" id="forgotForm" autocomplete="on">
@@ -1509,50 +1368,20 @@
       </form>
     `;
 
-    return new Promise((resolve) => {
-      const overlay = document.createElement("div");
-      overlay.className = "adshield-modal-overlay";
-      overlay.setAttribute("data-type", "info");
-      overlay.setAttribute("data-size", "normal");
-
-      overlay.innerHTML = `
-        <div class="adshield-modal" role="dialog" aria-modal="true">
-          <div class="adshield-modal-body">
-            <div class="adshield-modal-title">忘记密码</div>
-            <div class="adshield-modal-message"></div>
-          </div>
-          <div class="adshield-modal-actions">
-            <button class="adshield-modal-btn adshield-modal-btn-cancel" data-cancel>取消</button>
-            <button class="adshield-modal-btn adshield-modal-btn-confirm" data-confirm>联系开发者</button>
-          </div>
-        </div>
-      `;
-      overlay.querySelector(".adshield-modal-message").innerHTML = html;
-      document.body.appendChild(overlay);
-      requestAnimationFrame(() => overlay.classList.add("open"));
-
-      const form = overlay.querySelector("#forgotForm");
-      const emailInput = overlay.querySelector("#forgotEmail");
-      const hint = overlay.querySelector("#forgotHint");
-      const btnConfirm = overlay.querySelector("[data-confirm]");
-      const btnCancel = overlay.querySelector("[data-cancel]");
-
-      function cleanup() {
-        overlay.classList.remove("open");
-        setTimeout(() => overlay.remove(), 180);
-      }
-      function onKey(e) { if (e.key === "Escape") { cleanup(); document.removeEventListener("keydown", onKey); resolve(false); } }
-      document.addEventListener("keydown", onKey);
-
-      btnCancel.addEventListener("click", () => { cleanup(); document.removeEventListener("keydown", onKey); resolve(false); });
-      overlay.addEventListener("click", (e) => { if (e.target === overlay) { cleanup(); document.removeEventListener("keydown", onKey); resolve(false); } });
-
-      async function doSubmit() {
+    const r = await showFormDialog({
+      title: "忘记密码",
+      bodyHtml: html,
+      showIcon: false,
+      confirmText: "联系开发者",
+      cancelText: "取消",
+      focusSelector: "#forgotEmail",
+      onSubmit: (root) => {
+        const emailInput = root.querySelector("#forgotEmail");
+        const hint = root.querySelector("#forgotHint");
         const email = emailInput.value.trim();
         hint.textContent = "";
         hint.className = "auth-hint";
-        if (!validateEmail(email)) { hint.textContent = "邮箱格式不正确"; hint.classList.add("err"); return; }
-
+        if (!validateEmail(email)) { hint.textContent = "邮箱格式不正确"; hint.classList.add("err"); return false; }
         // 打开邮件客户端（预填收件人、主题、正文）
         const to = "guihuo125@users.noreply.github.com";
         const subject = encodeURIComponent("AdShield 密码重置请求");
@@ -1563,19 +1392,25 @@
         } catch (e) {
           window.location.href = mailto;
         }
-
-        cleanup();
-        document.removeEventListener("keydown", onKey);
-        await showAlert(
-          "已打开您的邮件客户端（如果没自动打开，请手动发邮件到：\n\nguihuo125@users.noreply.github.com",
-          { title: "请发送邮件", type: "info" }
-        );
-        resolve(true);
+        return true;
+      },
+      onMount: (root) => {
+        // 回车提交
+        root.querySelector("#forgotForm").addEventListener("submit", (e) => {
+          e.preventDefault();
+          const btn = root.querySelector("[data-confirm]");
+          if (btn) btn.click();
+        });
       }
-      form.addEventListener("submit", (e) => { e.preventDefault(); doSubmit(); });
-      btnConfirm.addEventListener("click", doSubmit);
-      setTimeout(() => emailInput.focus(), 50);
     });
+
+    if (r) {
+      await showAlert(
+        "已打开您的邮件客户端（如果没自动打开，请手动发邮件到：\n\nguihuo125@users.noreply.github.com",
+        { title: "请发送邮件", type: "info" }
+      );
+    }
+    return !!r;
   }
 
   // ===== 修改密码弹窗 =====
@@ -1599,85 +1434,66 @@
       </form>
     `;
 
-    return new Promise((resolve) => {
-      const overlay = document.createElement("div");
-      overlay.className = "adshield-modal-overlay";
-      overlay.setAttribute("data-type", "info");
-      overlay.setAttribute("data-size", "normal");
-
-      overlay.innerHTML = `
-        <div class="adshield-modal" role="dialog" aria-modal="true">
-          <div class="adshield-modal-body">
-            <div class="adshield-modal-title">修改密码</div>
-            <div class="adshield-modal-message"></div>
-          </div>
-          <div class="adshield-modal-actions">
-            <button class="adshield-modal-btn adshield-modal-btn-cancel" data-cancel>取消</button>
-            <button class="adshield-modal-btn adshield-modal-btn-confirm" data-confirm>确定</button>
-          </div>
-        </div>
-      `;
-      overlay.querySelector(".adshield-modal-message").innerHTML = html;
-      document.body.appendChild(overlay);
-      requestAnimationFrame(() => overlay.classList.add("open"));
-
-      const form = overlay.querySelector("#pwdForm");
-      const oldPwd = overlay.querySelector("#oldPwd");
-      const newPwd = overlay.querySelector("#newPwd");
-      const newPwd2 = overlay.querySelector("#newPwd2");
-      const hint = overlay.querySelector("#pwdHint");
-      const strengthEl = overlay.querySelector("#newPwdStrength");
-      const btnConfirm = overlay.querySelector("[data-confirm]");
-      const btnCancel = overlay.querySelector("[data-cancel]");
-
-      newPwd.addEventListener("input", () => {
-        renderStrength(strengthEl, newPwd.value);
-      });
-
-      function cleanup() {
-        overlay.classList.remove("open");
-        setTimeout(() => overlay.remove(), 180);
-      }
-      function onKey(e) { if (e.key === "Escape") { cleanup(); document.removeEventListener("keydown", onKey); resolve(false); } }
-      document.addEventListener("keydown", onKey);
-
-      btnCancel.addEventListener("click", () => { cleanup(); document.removeEventListener("keydown", onKey); resolve(false); });
-      overlay.addEventListener("click", (e) => { if (e.target === overlay) { cleanup(); document.removeEventListener("keydown", onKey); resolve(false); } });
-
-      async function doSubmit() {
+    return showFormDialog({
+      title: "修改密码",
+      bodyHtml: html,
+      showIcon: false,
+      confirmText: "确定",
+      cancelText: "取消",
+      focusSelector: "#oldPwd",
+      onSubmit: async (root) => {
+        const oldPwd = root.querySelector("#oldPwd");
+        const newPwd = root.querySelector("#newPwd");
+        const newPwd2 = root.querySelector("#newPwd2");
+        const hint = root.querySelector("#pwdHint");
+        const btnConfirm = root.querySelector("[data-confirm]");
         const oldP = oldPwd.value;
         const p1 = newPwd.value;
         const p2 = newPwd2.value;
         hint.textContent = "";
         hint.className = "auth-hint";
-        if (!oldP) { hint.textContent = "请输入原密码"; hint.classList.add("err"); return; }
+        if (!oldP) { hint.textContent = "请输入原密码"; hint.classList.add("err"); return false; }
         const check = validateNewPassword(p1);
-        if (!check.ok) { hint.textContent = check.reason; hint.classList.add("err"); return; }
-        if (p1 !== p2) { hint.textContent = "两次新密码不一致"; hint.classList.add("err"); return; }
-        if (oldP === p1) { hint.textContent = "新密码不能与原密码相同"; hint.classList.add("err"); return; }
+        if (!check.ok) { hint.textContent = check.reason; hint.classList.add("err"); return false; }
+        if (p1 !== p2) { hint.textContent = "两次新密码不一致"; hint.classList.add("err"); return false; }
+        if (oldP === p1) { hint.textContent = "新密码不能与原密码相同"; hint.classList.add("err"); return false; }
 
         btnConfirm.disabled = true;
         btnConfirm.textContent = "提交中...";
         try {
           await changePassword(oldP, p1);
-          cleanup();
-          document.removeEventListener("keydown", onKey);
-          resolve(true);
+          return true;
         } catch (e) {
           hint.textContent = translateError(e.message || e);
           hint.classList.add("err");
           btnConfirm.disabled = false;
           btnConfirm.textContent = "确定";
+          return false;   // 保持弹窗打开，用户可重试
         }
+      },
+      onMount: (root) => {
+        const newPwd = root.querySelector("#newPwd");
+        const strengthEl = root.querySelector("#newPwdStrength");
+        newPwd.addEventListener("input", () => {
+          renderStrength(strengthEl, newPwd.value);
+        });
+        // 回车提交
+        root.querySelector("#pwdForm").addEventListener("submit", (e) => {
+          e.preventDefault();
+          const btn = root.querySelector("[data-confirm]");
+          if (btn) btn.click();
+        });
       }
-      form.addEventListener("submit", (e) => { e.preventDefault(); doSubmit(); });
-      btnConfirm.addEventListener("click", doSubmit);
-      setTimeout(() => oldPwd.focus(), 50);
     });
   }
 
   // ===== 弹窗：登录 / 注册 =====
-  function showAuthDialog(mode, preset) {
+  // 基于 shared/modal.js 的 showFormDialog 基座。
+  // 「切换登录/注册」用的是「关掉当前 → 用同一套 UI 再开一个」，
+  // 所以这里用 showFormDialog 的 onCancel + 自定义链接实现：
+  //   切换 → onCancel 里 resolve(showAuthDialog(另一种))
+  //   忘记密码 → onCancel 里 resolve(null)，另开一个弹窗
+  async function showAuthDialog(mode, preset) {
     // mode: "login" | "register"
     // preset: { email, notice } — 用于注册成功后预填邮箱 + 提示
     preset = preset || {};
@@ -1712,85 +1528,23 @@
       </form>
     `;
 
-    return new Promise((resolve) => {
-      const overlay = document.createElement("div");
-      overlay.className = "adshield-modal-overlay";
-      overlay.setAttribute("data-type", "info");
-      overlay.setAttribute("data-size", "normal");
+    // 切换/忘记密码：关掉当前弹窗后要走另一条路
+    let redirect = null;   // { kind: "switch", mode } | { kind: "forgot", email }
 
-      overlay.innerHTML = `
-        <div class="adshield-modal" role="dialog" aria-modal="true">
-          <div class="adshield-modal-body">
-            <div class="adshield-modal-title">${isLogin ? "登录账号" : "注册账号"}</div>
-            <div class="adshield-modal-message"></div>
-          </div>
-          <div class="adshield-modal-actions">
-            <button class="adshield-modal-btn adshield-modal-btn-cancel" data-cancel>取消</button>
-            <button class="adshield-modal-btn adshield-modal-btn-confirm" data-confirm>${isLogin ? "登录" : "注册"}</button>
-          </div>
-        </div>
-      `;
-      // 把表单塞进 message 区
-      overlay.querySelector(".adshield-modal-message").innerHTML = html;
-      document.body.appendChild(overlay);
-      requestAnimationFrame(() => overlay.classList.add("open"));
+    const result = await showFormDialog({
+      title: isLogin ? "登录账号" : "注册账号",
+      bodyHtml: html,
+      showIcon: false,
+      confirmText: isLogin ? "登录" : "注册",
+      cancelText: "取消",
+      focusSelector: "#authEmail",
+      onSubmit: async (root) => {
+        const emailInput = root.querySelector("#authEmail");
+        const pwdInput = root.querySelector("#authPassword");
+        const pwd2Input = root.querySelector("#authPassword2");
+        const hint = root.querySelector("#authHint");
+        const btnConfirm = root.querySelector("[data-confirm]");
 
-      const form = overlay.querySelector("#authForm");
-      const emailInput = overlay.querySelector("#authEmail");
-      const pwdInput = overlay.querySelector("#authPassword");
-      const pwd2Input = overlay.querySelector("#authPassword2");
-      const pwdStrengthEl = overlay.querySelector("#authPwdStrength");
-      const hint = overlay.querySelector("#authHint");
-      const btnConfirm = overlay.querySelector("[data-confirm]");
-      const btnCancel = overlay.querySelector("[data-cancel]");
-
-      // 注册时实时显示密码强度
-      if (!isLogin && pwdInput && pwdStrengthEl) {
-        pwdInput.addEventListener("input", () => {
-          renderStrength(pwdStrengthEl, pwdInput.value);
-        });
-      }
-
-      function cleanup() {
-        overlay.classList.remove("open");
-        setTimeout(() => overlay.remove(), 180);
-      }
-
-      // 切换登录/注册 / 忘记密码
-      overlay.addEventListener("click", (e) => {
-        const link = e.target.closest("[data-switch]");
-        if (link) {
-          e.preventDefault();
-          cleanup();
-          resolve(showAuthDialog(link.getAttribute("data-switch")));
-          return;
-        }
-        const forgot = e.target.closest('[data-action="forgot"]');
-        if (forgot) {
-          e.preventDefault();
-          const email = emailInput ? emailInput.value.trim() : "";
-          cleanup();
-          setTimeout(async () => {
-            await showForgotPasswordDialog(email);
-            resolve(null);
-          }, 200);
-        }
-      });
-
-      // 取消
-      btnCancel.addEventListener("click", () => { cleanup(); resolve(null); });
-      // 点遮罩
-      overlay.addEventListener("click", (e) => {
-        if (e.target === overlay) { cleanup(); resolve(null); }
-      });
-      // ESC
-      const onKey = (e) => {
-        if (e.key === "Escape") { cleanup(); document.removeEventListener("keydown", onKey); resolve(null); }
-      };
-      document.addEventListener("keydown", onKey);
-
-      // 提交逻辑
-      async function doSubmit() {
         const email = emailInput.value.trim();
         const pwd = pwdInput.value;
         hint.textContent = "";
@@ -1799,14 +1553,14 @@
         if (!validateEmail(email)) {
           hint.textContent = "邮箱格式不正确";
           hint.classList.add("err");
-          return;
+          return false;
         }
         if (isLogin) {
           // 登录：宽松校验（老用户密码可能不符新策略）
           if (!validatePassword(pwd)) {
             hint.textContent = "请输入密码";
             hint.classList.add("err");
-            return;
+            return false;
           }
         } else {
           // 注册：严格校验
@@ -1814,40 +1568,30 @@
           if (!check.ok) {
             hint.textContent = check.reason;
             hint.classList.add("err");
-            return;
+            return false;
           }
           if (pwd2Input && pwd2Input.value !== pwd) {
             hint.textContent = "两次密码不一致";
             hint.classList.add("err");
-            return;
+            return false;
           }
         }
 
         btnConfirm.disabled = true;
         btnConfirm.textContent = isLogin ? "登录中..." : "注册中...";
         try {
-          const result = isLogin ? await doLogin(email, pwd) : await doRegister(email, pwd);
-          document.removeEventListener("keydown", onKey);
-          cleanup();
+          const r = isLogin ? await doLogin(email, pwd) : await doRegister(email, pwd);
           if (isLogin) {
             // 登录成功：直接返回
-            resolve({ email, mode: "login", result });
-          } else {
-            // 注册成功：自动切换到登录页（预填邮箱 + 提示）
-            const needVerify = !!(result && result.needVerify);
-            const noticeText = needVerify
-              ? "✅ 注册成功！验证邮件已发送到 " + email + "，请点击邮件中的链接完成验证，然后返回登录。"
-              : "✅ 注册成功，请登录";
-            setTimeout(async () => {
-              const loginResult = await showAuthDialog("login", {
-                email: email,
-                notice: noticeText
-              });
-              // 登录成功后（或取消后）刷新 UI
-              renderAccount();
-              resolve({ email, mode: "register", result, loginResult });
-            }, 200);
+            return { email, mode: "login", result: r };
           }
+          // 注册成功：自动切换到登录页（预填邮箱 + 提示）
+          const needVerify = !!(r && r.needVerify);
+          const noticeText = needVerify
+            ? "✅ 注册成功！验证邮件已发送到 " + email + "，请点击邮件中的链接完成验证，然后返回登录。"
+            : "✅ 注册成功，请登录";
+          redirect = { kind: "afterRegister", email, noticeText };
+          return { email, mode: "register", result: r };
         } catch (err) {
           console.error("[AdShield Auth] 失败:", err);
           const errMsg = String(err.message || err);
@@ -1896,17 +1640,68 @@
           }
           btnConfirm.disabled = false;
           btnConfirm.textContent = isLogin ? "登录" : "注册";
+          return false;   // 保持弹窗打开，用户可重试
         }
+      },
+      onCancel: (root) => {
+        const emailInput = root.querySelector("#authEmail");
+        redirect = { kind: "cancel", email: emailInput ? emailInput.value.trim() : "" };
+      },
+      onMount: (root) => {
+        const pwdInput = root.querySelector("#authPassword");
+        const pwdStrengthEl = root.querySelector("#authPwdStrength");
+        // 注册时实时显示密码强度
+        if (!isLogin && pwdInput && pwdStrengthEl) {
+          pwdInput.addEventListener("input", () => {
+            renderStrength(pwdStrengthEl, pwdInput.value);
+          });
+        }
+        // 切换登录/注册 / 忘记密码
+        root.addEventListener("click", (e) => {
+          const link = e.target.closest("[data-switch]");
+          if (link) {
+            e.preventDefault();
+            redirect = { kind: "switch", mode: link.getAttribute("data-switch") };
+            const btn = root.querySelector("[data-cancel]");
+            if (btn) btn.click();
+            return;
+          }
+          const forgot = e.target.closest('[data-action="forgot"]');
+          if (forgot) {
+            e.preventDefault();
+            const emailInput = root.querySelector("#authEmail");
+            redirect = { kind: "forgot", email: emailInput ? emailInput.value.trim() : "" };
+            const btn = root.querySelector("[data-cancel]");
+            if (btn) btn.click();
+          }
+        });
+        // 回车提交
+        root.querySelector("#authForm").addEventListener("submit", (e) => {
+          e.preventDefault();
+          const btn = root.querySelector("[data-confirm]");
+          if (btn) btn.click();
+        });
       }
-
-      // form 提交（按回车）
-      form.addEventListener("submit", (e) => { e.preventDefault(); doSubmit(); });
-      // 关键：弹窗的「确定」按钮手动触发提交
-      btnConfirm.addEventListener("click", doSubmit);
-
-      // 自动聚焦
-      setTimeout(() => emailInput.focus(), 50);
     });
+
+    // 弹窗关闭后按 redirect 分派
+    if (redirect && redirect.kind === "switch") {
+      return showAuthDialog(redirect.mode);
+    }
+    if (redirect && redirect.kind === "forgot") {
+      await showForgotPasswordDialog(redirect.email);
+      return null;
+    }
+    if (redirect && redirect.kind === "afterRegister") {
+      const loginResult = await showAuthDialog("login", {
+        email: redirect.email,
+        notice: redirect.noticeText
+      });
+      // 登录成功后（或取消后）刷新 UI
+      renderAccount();
+      return { email: redirect.email, mode: "register", result: result && result.result, loginResult };
+    }
+    return result;
   }
 
   // ===== 云端同步 =====
@@ -2142,144 +1937,34 @@
     return resp;
   }
 
-  // ===== 缺陷1：云端数据白名单校验（纯函数，不碰 chrome/DOM，便于单独测试） =====
-  function normalizeHost(h) {
-    return String(h == null ? "" : h).trim().toLowerCase().replace(/^www\./, "");
-  }
-  function isValidHost(h) {
-    return /^[a-z0-9.-]+\.[a-z]{2,}$/.test(h);
-  }
+  // ===== 云端数据白名单校验 =====
+  // 纯函数已移到 shared/validate.js（不碰 chrome/DOM，可单独测试），
+  // 配套测试见 tools/test-validate.mjs。
 
-  // 只拒「会让规则坏掉」的字符：除 \t \n \r 之外的控制字符。
-  // 绝不能拒 < > —— 元素隐藏规则 example.com##.ad > .banner 和 CSS 声明里它们是合法字符，
-  // 而这里拒掉的条目会被写回本地、再触发自动上传推回云端，等于把用户的规则永久删掉。
-  const RULE_CTRL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/;
 
   // 元素隐藏规则（## / #@#）的选择器会被原样拼进 CSS —— cosmetic.js 里是 sel + "{display:none !important;}"。
   // 含 { } @ /* 的选择器能提前闭合规则块、塞进新声明、或把后面的内容注释掉，
   // 等于往用户访问的每个网站注入任意 CSS（可伪造界面、可外传页面数据）。
   // < > 不拦：".ad > .banner" 是合法选择器，拦了会误伤用户自己的正常规则。
-  const CSS_BREAKOUT = /[{}@]|\/\*|\*\//;
-  const MAX_CSS_SELECTOR_LEN = 500;
 
-  function isSafeCssSelector(sel) {
-    if (typeof sel !== "string") return false;
-    const s = sel.trim();
-    if (!s || s.length > MAX_CSS_SELECTOR_LEN) return false;
-    return !CSS_BREAKOUT.test(s);
-  }
+
+
+
 
   // 带元素隐藏部分的用户规则要额外检查选择器；纯网络规则交给 background 的解析器，不在这里管
-  function isSafeUserRule(rule) {
-    if (typeof rule !== "string") return false;
-    const hideIdx = rule.indexOf("##");
-    const excIdx = rule.indexOf("#@#");
-    if (hideIdx < 0 && excIdx < 0) return true;
-    const isExcept = excIdx >= 0;
-    const idx = isExcept ? excIdx : hideIdx;
-    const selector = rule.slice(idx + (isExcept ? 3 : 2)).trim();
-    return isSafeCssSelector(selector);
-  }
+
 
   // user_rules：数组；每项 string；≤1000 字符；总条数 ≤5000；元素隐藏部分的选择器不能突破 CSS 块
-  function sanitizeCloudUserRules(arr) {
-    const res = { list: [], rejected: 0 };
-    if (!Array.isArray(arr)) { if (arr != null) res.rejected = 1; return res; }
-    for (let i = 0; i < arr.length; i++) {
-      const r = arr[i];
-      if (typeof r !== "string" || r.length > 1000 || RULE_CTRL_CHARS.test(r)) { res.rejected++; continue; }
-      if (!isSafeUserRule(r)) { res.rejected++; continue; }
-      if (res.list.length >= 5000) { res.rejected++; continue; }   // 超过总条数上限
-      res.list.push(r);
-    }
-    return res;
-  }
+
 
   // subscriptions：数组 ≤20；url 必须 ^https:// 且 new URL() 可解析且 ≤500；id 归一化 1..99
-  function sanitizeCloudSubscriptions(arr) {
-    const res = { list: [], rejected: 0 };
-    if (!Array.isArray(arr)) { if (arr != null) res.rejected = 1; return res; }
-    const usedIds = new Set();
-    for (let i = 0; i < arr.length; i++) {
-      if (res.list.length >= 20) { res.rejected++; continue; }
-      const sub = arr[i];
-      if (!sub || typeof sub !== "object") { res.rejected++; continue; }
-      const url = typeof sub.url === "string" ? sub.url.trim() : "";
-      if (!/^https:\/\//.test(url) || url.length > 500) { res.rejected++; continue; }
-      try { new URL(url); } catch (e) { res.rejected++; continue; }
-      const m = ((Number(sub.id) || 0) % 100);   // 沿用后台 ID 约定
-      let id = (m >= 1 && m <= 99) ? m : 0;
-      // 订阅 id 决定它占用的 DNR ID 段（后台：SUB_RULE_BASE + id%100 * 10000）。
-      // 两个订阅撞到同一个 id 就会共用一段规则，后应用的那个把前一个整段覆盖掉。
-      if (!id || usedIds.has(id)) {
-        id = 0;
-        for (let k = 1; k < 100; k++) { if (!usedIds.has(k)) { id = k; break; } }
-      }
-      if (!id) { res.rejected++; continue; }
-      usedIds.add(id);
-      // 只重建已知键：云端行里的额外键不能原样透传，否则一条脏数据就能改写后台消费的字段
-      res.list.push({
-        url: url,
-        id: id,
-        name: typeof sub.name === "string" && sub.name.length <= 120 ? sub.name : "",
-        enabled: sub.enabled === false ? false : true
-      });
-    }
-    return res;
-  }
+
 
   // whitelist.disabledSites：主机名白名单；pausedUntil：键同主机校验、值为有限正整数时间戳
-  function sanitizeCloudWhitelist(obj) {
-    const res = { disabledSites: [], pausedUntil: {}, rejected: 0 };
-    if (!obj || typeof obj !== "object" || Array.isArray(obj)) { if (obj != null) res.rejected = 1; return res; }
-    const ds = obj.disabledSites;
-    if (Array.isArray(ds)) {
-      for (let i = 0; i < ds.length; i++) {
-        const h = normalizeHost(ds[i]);
-        if (h && isValidHost(h)) { if (res.disabledSites.indexOf(h) === -1) res.disabledSites.push(h); }
-        else res.rejected++;
-      }
-    } else if (ds != null) res.rejected++;
-    const pu = obj.pausedUntil;
-    if (pu && typeof pu === "object" && !Array.isArray(pu)) {
-      for (const k of Object.keys(pu)) {
-        const h = normalizeHost(k);
-        const n = Number(pu[k]);
-        if (h && isValidHost(h) && Number.isFinite(n) && Number.isInteger(n) && n > 0) res.pausedUntil[h] = n;
-        else res.rejected++;
-      }
-    } else if (pu != null) res.rejected++;
-    return res;
-  }
+
 
   // settings：只拷贝白名单键；rulesets 只接受布尔值；subscriptionInterval 必须 0..168；其余丢弃并计数
-  function sanitizeCloudSettings(obj) {
-    const res = { settings: {}, rejected: 0 };
-    if (!obj || typeof obj !== "object" || Array.isArray(obj)) { if (obj != null) res.rejected = 1; return res; }
-    const ALLOW = ["enabled", "rulesets", "antiDetect", "assist", "showBadge", "subscriptionInterval"];
-    for (const k of Object.keys(obj)) {
-      if (ALLOW.indexOf(k) === -1) { res.rejected++; continue; }   // 白名单外的键丢弃
-      const v = obj[k];
-      if (k === "rulesets") {
-        if (typeof v === "boolean") { res.settings.rulesets = v; }
-        else if (v && typeof v === "object" && !Array.isArray(v)) {
-          // rulesets 为映射表时逐项过滤，只保留布尔值，非布尔项丢弃并计数
-          const clean = {};
-          for (const rk of Object.keys(v)) { if (typeof v[rk] === "boolean") clean[rk] = v[rk]; else res.rejected++; }
-          res.settings.rulesets = clean;
-        } else res.rejected++;
-      } else if (k === "subscriptionInterval") {
-        const n = Number(v);
-        if (Number.isFinite(n) && n >= 0 && n <= 168) res.settings.subscriptionInterval = n;
-        else res.rejected++;
-      } else if (typeof v === "boolean") {
-        res.settings[k] = v;   // enabled / antiDetect / assist / showBadge
-      } else {
-        res.rejected++;        // 非布尔值一律拒绝，避免 "yes" 之类的字符串写进开关
-      }
-    }
-    return res;
-  }
+
 
   // 写回本地：缺陷3（updated_at 冲突防护）+ 缺陷1（白名单校验，拒绝项汇总不静默丢弃）
   async function applyCloudData(cloud, opts) {

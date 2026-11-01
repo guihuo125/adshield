@@ -12,7 +12,8 @@
     "alarms",
     "contextMenus",
     "scripting",
-    "notifications"
+    "notifications",
+    "activeTab"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -55,6 +56,7 @@
         "<all_urls>"
       ],
       "js": [
+        "src/shared/host.js",
         "src/content/cosmetic.js",
         "src/content/anti-detect.js"
       ],
@@ -67,6 +69,7 @@
         "<all_urls>"
       ],
       "js": [
+        "src/shared/dom.js",
         "src/content/picker.js"
       ],
       "run_at": "document_start",

@@ -6,14 +6,15 @@
   window.__adshield_anti_detect_installed__ = true;
 
   const host = location.hostname;
+  // 白名单 / 定时暂停统一走 shared/host.js 的子域匹配，与 cosmetic.js、网络层保持一致
+  const { anyHostMatches, isPausedUntil } = globalThis.adshieldHost || {};
 
   function shouldApply(s) {
     if (!s) return true;
     if (s.enabled === false) return false;
     if (s.antiDetect === false) return false;
-    if (Array.isArray(s.disabledSites) && s.disabledSites.includes(host)) return false;
-    const until = (s.pausedUntil || {})[host];
-    if (until && until > Date.now()) return false;
+    if (anyHostMatches && anyHostMatches(host, s.disabledSites)) return false;
+    if (isPausedUntil && isPausedUntil(s.pausedUntil, host)) return false;
     return true;
   }
 

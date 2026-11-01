@@ -1,0 +1,14 @@
+{
+  "name": "adshield-tools",
+  "private": true,
+  "version": "2.9.96",
+  "description": "AdShield 广告拦截器 —— 开发工具（校验与测试）",
+  "type": "module",
+  "scripts": {
+    "check": "node tools/check.mjs",
+    "test": "node tools/test-host.mjs && node tools/test-rules.mjs && node tools/test-validate.mjs",
+    "verify": "npm run check && npm test",
+    "probe": "node tools/probe-cdp.mjs",
+    "probe:raw": "node tools/probe-cdp.mjs --json"
+  }
+}

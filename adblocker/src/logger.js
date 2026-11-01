@@ -11,9 +11,9 @@ function fmtTime(ts) {
 
 const SAFE_CATS = { ads: 1, tracking: 1, annoyances: 1, url_clean: 1, malware: 1 };
 
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
-}
+// HTML 转义与文件下载统一走 shared/dom.js
+const { escapeHtml, downloadJson, downloadCsv } = window.adshieldDom;
+const { MSG } = window.adshieldConfig;
 
 function sendMessage(type, payload) {
   return new Promise((resolve) => {
@@ -26,7 +26,7 @@ function sendMessage(type, payload) {
 
 async function load() {
   // 优先向 background 请求实时数据
-  let stats = await sendMessage("getStats");
+  let stats = await sendMessage(MSG.GET_STATS);
   if (!stats) {
     const store = await chrome.storage.local.get(STATS_KEY);
     stats = store[STATS_KEY] || {};
@@ -35,7 +35,8 @@ async function load() {
   allLogs = (stats.recentLogs || []).slice().reverse();
   $("#logCount").textContent = allLogs.length;
   const note = $("#statsNote");
-  if (note) note.hidden = stats.live !== false;
+  // 判定统一为「只有明确拿到 live === true 才隐藏」，与 popup/options 保持一致
+  if (note) note.hidden = stats.live === true;
   render();
 }
 
@@ -79,13 +80,7 @@ $("#catFilter").addEventListener("change", render);
 
 // 导出 JSON
 $("#exportJsonBtn").addEventListener("click", () => {
-  const blob = new Blob([JSON.stringify(allLogs, null, 2)], { type: "application/json" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "adshield-logs-" + fmtDate() + ".json";
-  a.click();
-  URL.revokeObjectURL(url);
+  downloadJson(allLogs, `adshield-logs-${fmtDate()}.json`);
 });
 
 // 导出 CSV
@@ -109,15 +104,8 @@ $("#exportCsvBtn").addEventListener("click", () => {
       csvEsc(l.pageHost || "")
     ].join(","));
   }
-  // ﻿ = BOM，让 Excel 正确识别 UTF-8 中文
-  const csv = "\uFEFF" + rows.join("\r\n");
-  const blob = new Blob([csv], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = "adshield-logs-" + fmtDate() + ".csv";
-  a.click();
-  URL.revokeObjectURL(url);
+  // downloadCsv 自带 BOM（\uFEFF），让 Excel 正确识别 UTF-8 中文
+  downloadCsv(rows, `adshield-logs-${fmtDate()}.csv`);
 });
 
 // 日期格式：YYYY-MM-DD_HHmm
@@ -135,10 +123,10 @@ $("#clearBtn").addEventListener("click", async () => {
     type: "danger"
   });
   if (!ok) return;
-  const store = await chrome.storage.local.get(STATS_KEY);
-  const stats = store[STATS_KEY] || {};
-  stats.recentLogs = [];
-  await chrome.storage.local.set({ [STATS_KEY]: stats });
+  // 走 background 清：内存缓冲和落盘一起清。
+  // 这里若直接写 storage，background 的内存缓冲仍留着旧日志，
+  // 下一次 flush 会把它们写回来，用户点了「清空」日志却又冒出来。
+  await chrome.runtime.sendMessage({ type: "clearLogs" });
   allLogs = [];
   render();
 });

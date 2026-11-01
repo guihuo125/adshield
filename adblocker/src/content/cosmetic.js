@@ -5,6 +5,10 @@
 
   const STYLE_ID = "__adshield_cosmetic__";
   const host = location.hostname;  // 与 storage 一致，不再剥离 www
+  // 白名单判定统一走 shared/host.js：子域匹配（存 example.com 则 www.example.com 也命中），
+  // 与 DNR 的 requestDomains 语义一致。之前这里用精确匹配 disabledSites.includes(host)，
+  // 而网络层存的是剥 www 的 example.com —— 于是「请求已放行但元素仍被隐藏」。
+  const { anyHostMatches, isPausedUntil } = globalThis.adshieldHost || {};
 
   const GENERIC_SELECTORS = [
     '[id^="google_ads_"]',
@@ -196,9 +200,10 @@
     if (!s) return true;
     if (s.enabled === false) return false;
     // 元素隐藏已改为始终启用（不再有独立开关）
-    if (Array.isArray(s.disabledSites) && s.disabledSites.includes(host)) return false;
-    const until = (s.pausedUntil || {})[host];
-    if (until && until > Date.now()) return false;
+    // 白名单 / 定时暂停都用子域匹配：白名单存 example.com 时，
+    // www.example.com 也必须一起放行，否则网络层已放行、元素层还在隐藏
+    if (anyHostMatches && anyHostMatches(host, s.disabledSites)) return false;
+    if (isPausedUntil && isPausedUntil(s.pausedUntil, host)) return false;
     return true;
   }
 
